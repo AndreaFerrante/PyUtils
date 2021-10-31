@@ -1,8 +1,8 @@
-This package has different datetime and file system utilities that are handy for everyday coding life ::tada:: <br>
-Open command in folder and install the PyCorner package with the command:
+This package has different datetime and file system utilities that are handy for everyday coding life :tada: <br>
+Open command prompt / terminal from the folder and install the PyUtils package with the command:
 
 	pip install .
 
-To remove the package open command in folder and install the PyCorner package with the command:
+To remove the package open command in folder and install the PyUtils package with the command:
 
-	pip uninstall pycorner
+	pip uninstall pyutils
