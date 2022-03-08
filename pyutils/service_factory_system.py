@@ -14,7 +14,7 @@ def get_files_in_path(path_to_search:str='', file_extension:str=None) -> list:
 
 	PARAMETERS:
 		path_to_search: string format, this is the a single folder path form which the files list is created
-		file_extension: string format, this is the fiel extension of files inside returned files list (do not pass the dot)
+		file_extension: string format, this is the file extension of files inside returned files list (do not pass the dot)
 	'''
 
 
@@ -36,6 +36,26 @@ def get_files_in_path(path_to_search:str='', file_extension:str=None) -> list:
 
 
 	return files_
+
+
+def get_file_in_root_path(path_to_search:str='', file_name:str=''):
+
+	'''
+	This function returns all file with a name in a root path.
+	This function works top-down: from top filename path till the very root one.
+
+	PARAMETERS:
+		path_to_search: string format, this is the a single folder path form which the files list is created
+		file_name: string format, this is the file name to be searched top-down given the root path
+	'''
+
+	result = []
+
+	for root, dir, files in os.walk(path_to_search):
+		if file_name in files:
+			result.append(os.path.join(root, file_name))
+
+	return result
 
 
 def get_file_content(path_to_read:str=None, file_name:str=None):
@@ -194,5 +214,6 @@ def get_xlsx_files_in_path_stacked(path_to_stack:str=None, file_extensions:list=
 
 	else:
 		warnings.warn("Attention: path to stack must be passed", RuntimeWarning)
+
 
 
