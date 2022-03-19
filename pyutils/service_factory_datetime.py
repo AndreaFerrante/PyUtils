@@ -1,4 +1,5 @@
 import datetime
+import math
 
 
 def get_yesterday(format='%Y%m%d', days=1):
@@ -91,3 +92,29 @@ def get_current_year_startdate(format:str='%Y%m%d'):
 	'''
 
 	return datetime.datetime.today().replace(month=1, day=1).strftime(format=format)
+
+
+def month_reduction(month_delta:int, month_current:int, year_current:int) -> str:
+
+	'''
+	params:
+		month_delta:int   : this param gets how many month the function should go back in time (use zero to receive the current month starting day)
+		month_current:int : this param is the current month from which we should get month back in time
+		year_current:int  : this param is the current year from which we should get month back in time
+	returns:
+		returns a string in format YYYYMMDD of the first month back in time given parameters
+	'''
+
+	month_unit      = 1 / 12
+	year_current_   = year_current * 12 + month_current
+	year_current_   = (year_current_ - month_delta) * month_unit
+
+	final_year      = round(math.modf(year_current_)[1])
+	final_month     = round(math.modf(year_current_)[0] / month_unit)
+
+	final_year  = np.where(final_month == 0, final_year - 1, final_year)
+	final_month = np.where(final_month == 0, 12 , final_month)
+
+	return str(final_year) + str(final_month).zfill(2) + '01'
+
+
