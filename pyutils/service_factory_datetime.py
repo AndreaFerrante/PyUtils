@@ -94,7 +94,6 @@ def get_current_year_startdate(format:str='%Y%m%d'):
 	return datetime.datetime.today().replace(month=1, day=1).strftime(format=format)
 
 
-<<<<<<< HEAD
 def month_reduction(month_delta:int, month_current:int, year_current:int) -> str:
 
 	'''
@@ -115,7 +114,7 @@ def month_reduction(month_delta:int, month_current:int, year_current:int) -> str
 
 	final_year  = np.where(final_month == 0, final_year - 1, final_year)
 	final_month = np.where(final_month == 0, 12 , final_month)
-=======
+
 
 def get_time_month(delta_month:int, current_month:int, current_year:int) -> str:
 
@@ -134,17 +133,12 @@ def get_time_month(delta_month:int, current_month:int, current_year:int) -> str:
 
 	final_year      = round(math.modf(year_current_)[1])
 	final_month     = round(math.modf(year_current_)[0] / (1/12)) + 1
->>>>>>> c2bf691 (Datetime factory updated)
 
 	return str(final_year) + str(final_month).zfill(2) + '01'
 
 
-<<<<<<< HEAD
-=======
 
 
 
 
 
-
->>>>>>> c2bf691 (Datetime factory updated)
