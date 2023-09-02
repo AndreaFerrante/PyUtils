@@ -1,6 +1,7 @@
 import os
 import re
 import time
+import psutil
 import zipfile
 import warnings
 import pandas as pd
@@ -215,5 +216,44 @@ def get_xlsx_files_in_path_stacked(path_to_stack:str=None, file_extensions:list=
 	else:
 		warnings.warn("Attention: path to stack must be passed", RuntimeWarning)
 
+
+def list_processes():
+
+	'''
+	List all currently running processes on the machine.
+	:return: A list of dictionaries containing the PID and name of each running process.
+	:rtype: list[dict]
+
+	:Example:
+	list_processes()
+	[{'pid': 1, 'name': 'systemd'}, {'pid': 2, 'name': 'kthreadd'}, ...]
+	'''
+
+	process_list = list()
+
+	for process in psutil.process_iter(['pid', 'name']):
+		process_list.append(process.info)
+
+	return process_list
+
+
+def close_app(app_name:str):
+
+	'''
+	Terminate a specific application (using its pid) starting from its goven name.
+
+	:param app_name: The name of the application to terminate.
+	:type app_name: str
+
+	:Example:
+	close_app("Chrome")
+	'''
+
+	for process in psutil.process_iter(['pid', 'name']):
+
+		if app_name in str(process.info['name']).lower():
+			print(f'Closing app named {process.info["name"]}')
+			process = psutil.Process(process.info['pid'])
+			process.terminate()
 
 
