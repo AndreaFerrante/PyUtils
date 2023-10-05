@@ -1,0 +1,7 @@
+beautifulsoup4==4.12.2
+pandas==2.0.3
+psutil==5.9.0
+PyPDF2==3.0.1
+reportlab==4.0.5
+Requests==2.31.0
+setuptools==68.0.0

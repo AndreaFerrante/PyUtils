@@ -9,7 +9,27 @@ from bs4 import BeautifulSoup
 
 def dummy_we_server(port:int=8000):
 
+    """
+     Create a simple HTTP web server.
 
+     This function sets up and starts a basic HTTP web server using Python's built-in
+     `http.server.SimpleHTTPRequestHandler` and `socketserver.TCPServer`. The server will
+     serve files from the current directory and below, automatically mapping the file
+     structure to HTTP requests.
+
+     Parameters:
+     - port (int, optional): The port number on which the web server will listen.
+                              Default is 8000.
+
+     Notes:
+     - The server will run indefinitely until manually terminated.
+     - This is a simple server for demonstration or debugging purposes and is not
+       suitable for production use.
+
+     Example:
+     >>> dummy_web_server(8080)
+     Serving at port 8080
+     """
 
     with socketserver.TCPServer(('', port), http.server.SimpleHTTPRequestHandler) as httpd:
         print(f"Serving at port {port}")

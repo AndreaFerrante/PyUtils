@@ -3,7 +3,7 @@ import shutil
 
 
 def manage_database(source_db_file:str, backup_db_file:str):
-    
+
     """
     Manage a database by providing options to backup and restore.
 
