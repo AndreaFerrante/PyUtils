@@ -7,7 +7,7 @@ from email.mime.multipart import MIMEMultipart
 from bs4 import BeautifulSoup
 
 
-def dummy_we_server(port:int=8000):
+def dummy_web_server(port:int=8000):
 
     """
      Create a simple HTTP web server.

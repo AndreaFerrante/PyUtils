@@ -1,7 +1,29 @@
-class Scheduler:
+import time
+import datetime
+from threading import Thread
 
-	def __init__(self):
-		pass
 
-	def scheduler_printer(self):
-		print('This is my scheduler class...')
+class FunctionScheduler:
+    def __init__(self):
+        self.scheduled_functions = []
+        
+    def schedule(self, function, target_time):
+        self.scheduled_functions.append((function, target_time))
+        
+    def _run_function_at_time(self, function, target_time):
+        while True:
+            current_time = datetime.datetime.now()
+            if current_time >= target_time:
+                function()
+                break
+            time.sleep(1)  # Sleep for 1 second
+
+    def start(self):
+        threads = []
+        for function, target_time in self.scheduled_functions:
+            thread = Thread(target=self._run_function_at_time, args=(function, target_time))
+            threads.append(thread)
+            thread.start()
+        
+        for thread in threads:
+            thread.join()
