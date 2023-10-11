@@ -1,4 +1,4 @@
-from pyutils.service_factory.service_factory_datetime import (
+from pyutils.service_factory.datetimer import (
 	get_today,
 	get_yesterday,
 	get_recent_monday,
@@ -8,7 +8,7 @@ from pyutils.service_factory.service_factory_datetime import (
 	month_reduction
 )
 
-from pyutils.service_factory.service_factory_system import (
+from pyutils.service_factory.localhost import (
 	get_files_in_path,
 	get_file_content,
 	get_files_timestamps_in_path,
@@ -17,7 +17,7 @@ from pyutils.service_factory.service_factory_system import (
 	get_xlsx_files_in_path_stacked
 )
 
-from pyutils.service_factory.pdf_manager import (
+from pyutils.service_factory.pdf import (
 	pdf_generator_from_text,
 	scrape_pdf_content
 )
@@ -30,13 +30,13 @@ from pyutils.web.password import (
 	generate_password
 )
 
-from pyutils.web.web_sucker import (
+from pyutils.web.sucker import (
 	dummy_web_server,
 	simple_scrape,
 	email_sender
 )
 
-from pyutils.database.db_connector import (
+from pyutils.database.connector import (
 	manage_database
 )
 
@@ -44,11 +44,11 @@ from pyutils.data import (
 	analysis
 )
 
-__all__ = ['service_factory.service_factory_system',
-		   'service_factory.service_factory_datetime',
-		   'service_factory.pdf_manager',
+__all__ = ['service_factory.localhost',
+		   'service_factory.datetimer',
+		   'service_factory.pdf',
 		   'scheduler.scheduler',
-		   'database.db_connector',
+		   'database.connector',
 		   'web.password',
-		   'web.web_sucker',
+		   'web.sucker',
 		   'data.analysis']
