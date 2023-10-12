@@ -51,4 +51,5 @@ __all__ = ['service_factory.localhost',
 		   'database.connector',
 		   'web.password',
 		   'web.sucker',
+           'web.wol',
 		   'data.analysis']
