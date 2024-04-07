@@ -1,3 +1,7 @@
+from pyutils.service_factory.anonymizer import (
+	Anonymizer
+)
+
 from pyutils.service_factory.datetimer import (
 	get_today,
 	get_yesterday,
