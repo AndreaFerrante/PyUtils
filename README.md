@@ -7,7 +7,7 @@ To remove the package open command in folder and install the PyUtils package wit
 
 	pip uninstall pyutils
 
-One class that is handy it the class named ```Anonymizer```: this class leverages (```spacy```)[https://spacy.io/] to mask names, dates, organisation (etc) in any given text.
+One class that is handy it the class named ```Anonymizer```: this class leverages [```spacy```](https://spacy.io/) to mask names, dates, organisation (etc) in any given text.
 Try to use it as follows:
 
 ```
