@@ -6,3 +6,5 @@ Open command prompt / terminal from the folder and install the PyUtils package w
 To remove the package open command in folder and install the PyUtils package with the command:
 
 	pip uninstall pyutils
+
+One class that is handy it the class named ```python Anonymizer```
