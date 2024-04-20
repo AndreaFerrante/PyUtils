@@ -1,4 +1,5 @@
 import openai
+import tiktoken
 from openai import OpenAI
 
 class OpenAICollector(object):
@@ -36,6 +37,9 @@ class OpenAICollector(object):
 
         if text_to_embed is None:
             raise Exception('Pass text to embed, first.')
+
+        if model not in ['text-embedding-ada-002','text-embedding-3-large','text-embedding-3-small']:
+            raise Exception("Attention, the model can be only 'text-embedding-3-small','text-embedding-3-large', 'text-embedding-ada-002'.")
 
         try:
             embeddings = self.client.embeddings.create(
@@ -90,6 +94,46 @@ class OpenAICollector(object):
             raise ex
 
         return response.choices[0].message.content
+
+    def get_tokens_in_string(self, text_to_measure:str = "", model_encoding:str='gpt-3.5-turbo'):
+
+        """
+            Calculates the number of tokens in a given text based on the specified model's tokenization standards.
+
+            This function uses the 'tiktoken' library to tokenize the input text according to the encoding standard
+            of a specified model. It is useful for understanding how many tokens a particular text would generate
+            when processed by models like GPT-3.5 Turbo.
+
+            Parameters:
+                text_to_measure (str): The text for which tokens need to be counted. Defaults to an empty string.
+                model_encoding (str): The name of the model based on whose encoding the text will be tokenized.
+                                      Defaults to 'gpt-3.5-turbo'.
+
+            Returns:
+                int: The number of tokens that the input text generates according to the specified model's encoding.
+
+            Raises:
+                Exception: If no text is provided to the function (i.e., text_to_measure is an empty string).
+
+            Example:
+                >>> self.get_tokens_in_string("Hello world!", "gpt-3.5-turbo")
+                3  # Assuming "Hello world!" translates to 3 tokens in the specified model encoding.
+
+            Note:
+                This function depends on the 'tiktoken' library, which must be correctly installed and configured
+                to use the encoding_for_model function and to support the specified model encodings.
+            """
+
+        if text_to_measure == "":
+            raise Exception("Pass a text for token measurament to function 'get_tokens_in_string'.")
+
+        if model_encoding not in ['gpt-3.5-turbo', 'gpt-4']:
+            raise Exception("model_encoding param can be 'gpt-4' or 'gpt-3.5-turbo' only")
+
+        encoding   = tiktoken.encoding_for_model(model_encoding)
+        num_tokens = len(encoding.encode(text_to_measure))
+
+        return num_tokens
 
     def get_images(self):
         pass
