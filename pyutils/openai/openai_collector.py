@@ -1,6 +1,6 @@
+import base64
 import requests
 import tiktoken
-import numpy as np
 import pandas as pd
 from openai import OpenAI
 from datetime import datetime
@@ -17,6 +17,26 @@ class OpenAICollector:
         self.embedder    = self.__get_embedder(embedder)
         self.content     = self.__get_content(content)
         self.client      = self.__create_openai_client()
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"api_key='***', "  # Masked for security
+            f"content={self.content!r}, "
+            f"max_retries={self.max_retries!r}, "
+            f"timeout={self.timeout!r}, "
+            f"model={self.model!r}, "
+            f"embedder={self.embedder!r})"
+        )
+    
+    @staticmethod
+    def __encode_image(image_path:str):
+
+        try:
+            with open(image_path, "rb") as image_file:
+                return base64.b64encode(image_file.read()).decode('utf-8')
+        except Exception as ex:
+            raise Exception(f"While encoding the image, this error occured: {ex}")
 
     @staticmethod
     def __convert_unix_datetime(timestamp:int, format:str='%Y-%m-%d %H:%M:%S') -> str:
