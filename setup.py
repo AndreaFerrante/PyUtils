@@ -3,11 +3,11 @@ from setuptools import setup, find_packages
 
 setup(
     name                          = 'pyutils',
-    version                       = '0.1.0',
-    description                   = 'Utilities for everyday Python coding (datetime manipulation and file system management)',
+    version                       = '1.0.0',
+    description                   = 'Utilities for everyday Python coding !',
     author                        = 'Andrea Ferrante',
     author_email                  = 'nonicknamethankyou@gmail.com',
-    classifiers                   = ['Development Status :: 3 - Alpha',
+    classifiers                   = ['Development Status :: Release',
                                      'Intended Audience :: Developers',
                                      'Topic :: Software Development :: Build Tools',
                                      'License :: OSI Approved :: MIT License',
@@ -17,10 +17,12 @@ setup(
                                      'Programming Language :: Python :: 3.9',
                                      'Programming Language :: Python :: 3.10',
                                      'Programming Language :: Python :: 3.11',
+                                     'Programming Language :: Python :: 3.12',
+                                     'Programming Language :: Python :: 3.13',
                                      'Programming Language :: Python :: 3 :: Only'],
     keywords                      = 'datetime, setuptools',
     packages                      = find_packages(where='src'),
-    python_requires               = '>=3.8',
-    install_requires              = ['pandas', 'numpy'],
+    python_requires               = '>=3.11',
+    install_requires              = ['pandas', 'numpy', 'openai', 'tiktoken'],
     py_modules                    = ['pyutils']
 )
