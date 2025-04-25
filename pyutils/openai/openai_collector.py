@@ -1,3 +1,4 @@
+import time
 import base64
 import requests
 import tiktoken
@@ -13,9 +14,9 @@ class OpenAICollector:
         self.api_key     = api_key
         self.timeout     = timeout
         self.max_retries = max_retries
-        self.model       = self.__get_model(model)
-        self.embedder    = self.__get_embedder(embedder)
-        self.content     = self.__get_content(content)
+        self.model       = self.get_model(model)
+        self.embedder    = self.get_embedder(embedder)
+        self.content     = self.get_content(content)
         self.client      = self.__create_openai_client()
 
     def __repr__(self) -> str:
@@ -28,9 +29,9 @@ class OpenAICollector:
             f"model={self.model!r}, "
             f"embedder={self.embedder!r})"
         )
-    
+
     @staticmethod
-    def __encode_image(image_path:str):
+    def encode_image(image_path:str):
 
         try:
             with open(image_path, "rb") as image_file:
@@ -39,7 +40,7 @@ class OpenAICollector:
             raise Exception(f"While encoding the image, this error occured: {ex}")
 
     @staticmethod
-    def __convert_unix_datetime(timestamp:int, format:str='%Y-%m-%d %H:%M:%S') -> str:
+    def convert_unix_datetime(timestamp:int, format:str='%Y-%m-%d %H:%M:%S') -> str:
 
         try:
             return datetime.fromtimestamp(timestamp).strftime(format)
@@ -47,7 +48,7 @@ class OpenAICollector:
             raise Exception(f"While converting unix datetime, this exception occured: {ex}")
 
     @staticmethod
-    def __get_content(content:str) -> str:
+    def get_content(content:str) -> str:
 
         if len(content):
             return content
@@ -56,7 +57,7 @@ class OpenAICollector:
         You work with precision and always take the time to carefully craft the best possible answer.'''
 
     @staticmethod
-    def __get_model(model:str) -> str:
+    def get_model(model:str) -> str:
 
         if len(model):
             return model
@@ -64,7 +65,7 @@ class OpenAICollector:
         return "gpt-4.1"
 
     @staticmethod
-    def __get_embedder(embedder: str) -> str:
+    def get_embedder(embedder: str) -> str:
 
         if len(embedder):
             return embedder
@@ -109,7 +110,7 @@ class OpenAICollector:
             models = pd.DataFrame({
                 'model_name':               model_name,
                 'model_object':             model_object,
-                'model_creation_datetime': [self.__convert_unix_datetime(x) for x in model_creation_datetime],
+                'model_creation_datetime': [self.convert_unix_datetime(x) for x in model_creation_datetime],
                 'model_owned_by':          model_owned_by
             }).sort_values(['model_name', 'model_creation_datetime'], ascending=[True, False])
 
@@ -118,16 +119,21 @@ class OpenAICollector:
         except requests.exceptions.RequestException as ex:
             raise Exception(f"While requesting all OpenAI models, this error occured: {ex}")
 
-    def get_embeddings(self, text_to_embed:list=None, embedder:str="", return_full_object:bool=False):
+    def get_embeddings(self, text_to_embed:list=None, embedder:str="", return_full_object:bool=False, timer:bool=False):
 
         try:
 
             if len(embedder):
                 embedder = self.embedder
 
+            start_time = time.time()
             embeddings = self.client.embeddings.create(
                             model = embedder,
                             input = text_to_embed)
+            embedding_time = time.time() - start_time
+
+            if timer:
+                print(f"Embedding took: {round(embedding_time, 4)} seconds.")
 
             if return_full_object:
                 return embeddings
@@ -137,7 +143,7 @@ class OpenAICollector:
         except Exception as ex:
             raise Exception(f"While embedding, this error occured: {ex}")
 
-    def get_answer_given_query(self, query:str="", model:str=""):
+    def get_answer_given_query(self, query:str="", model:str="", timer:bool=False):
 
         ''' All openai models overview: https://platform.openai.com/docs/models/overview  '''
 
@@ -146,20 +152,25 @@ class OpenAICollector:
             if model == "":
                 model = self.model
 
+            start_time = time.time()
             response = self.client.chat.completions.create(
                     model    = model,
                     messages = [
                         {"role": "system",
                          "content": self.content},
                         {"role": "user",
-                         "content": query}
+                         "content": str(query)}
                     ]
                 )
+            answer_time = time.time() - start_time
+
+            if timer:
+                print(f"Answer took: {round(answer_time, 3)} seconds.")
+
+            return response.choices[0].message.content
 
         except Exception as ex:
             raise Exception(f"While posting a query to {model}, this error occured: {ex}")
-
-        return response.choices[0].message.content
 
     def get_reasoned_answer_given_query(self, query:str="", model:str="o1"):
 

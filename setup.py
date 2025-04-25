@@ -23,6 +23,6 @@ setup(
     keywords                      = 'datetime, setuptools',
     packages                      = find_packages(where='src'),
     python_requires               = '>=3.11',
-    install_requires              = ['pandas', 'numpy', 'openai', 'tiktoken'],
+    install_requires              = ['pandas', 'numpy', 'openai', 'tiktoken', 'youtube-transcript-api'],
     py_modules                    = ['pyutils']
 )

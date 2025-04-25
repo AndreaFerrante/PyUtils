@@ -1,3 +1,7 @@
+from pyutils.openai.openai_collector import (
+	OpenAICollector
+)
+
 from pyutils.service_factory.anonymizer import (
 	Anonymizer
 )
@@ -40,6 +44,16 @@ from pyutils.web.sucker import (
 	email_sender
 )
 
+from pyutils.web.wol import (
+	send_magic_packet
+)
+
+from pyutils.web.youtuber import (
+	extract_video_id,
+	fetch_transcript,
+	save_transcript_to_text
+)
+
 from pyutils.database.connector import (
 	manage_database
 )
@@ -56,4 +70,5 @@ __all__ = ['service_factory.localhost',
 		   'web.password',
 		   'web.sucker',
            'web.wol',
+		   'web.youtuber',
 		   'data.analysis']

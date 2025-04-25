@@ -1,6 +1,8 @@
 import socket
 
+
 def send_magic_packet(mac_address):
+
     try:
         mac_address = mac_address.replace(':', '')
         mac_address_bytes = bytes.fromhex(mac_address)
@@ -15,5 +17,6 @@ def send_magic_packet(mac_address):
             print(f"Bytes Sent: {bytes_sent}")
 
         print("Magic packet sent successfully.")
+
     except Exception as e:
         print(f"Failed to send magic packet: {e}")
