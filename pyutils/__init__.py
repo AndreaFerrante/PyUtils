@@ -31,7 +31,7 @@ from pyutils.service_factory.pdf import (
 )
 
 from pyutils.scheduler import (
-	scehduler
+	scheduler
 )
 
 from pyutils.web.password import (
