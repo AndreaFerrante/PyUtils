@@ -1,8 +1,7 @@
-import sqlite3
-import shutil
-
 
 def manage_database(source_db_file:str, backup_db_file:str):
+
+    import shutil
 
     """
     Manage a database by providing options to backup and restore.

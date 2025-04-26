@@ -11,8 +11,7 @@ Happy reading !
 
 import re
 from typing import Optional
-from youtube_transcript_api import YouTubeTranscriptApi
-from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound, VideoUnavailable
+
 
 def extract_video_id(url: str) -> Optional[str]:
 
@@ -34,6 +33,9 @@ def extract_video_id(url: str) -> Optional[str]:
         raise Exception(f"While getting the 'video_id' this error occured: {ex}")
 
 def fetch_transcript(video_id: str, languages: list = ['en'], return_text_only:bool=True) -> Optional[str]:
+
+    from youtube_transcript_api import YouTubeTranscriptApi
+    from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound, VideoUnavailable
 
     try:
 

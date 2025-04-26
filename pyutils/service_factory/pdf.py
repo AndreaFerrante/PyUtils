@@ -1,8 +1,7 @@
-import PyPDF2
-from reportlab.pdfgen import canvas
-
 
 def pdf_generator_from_text(output_file:str, pdf_text:str) -> None:
+
+    from reportlab.pdfgen import canvas
 
     """
      Generate a PDF file with given text.
@@ -23,8 +22,9 @@ def pdf_generator_from_text(output_file:str, pdf_text:str) -> None:
     except Exception as ex:
         print(f'Function pdf_generator give error {ex}')
 
-
 def scrape_pdf_content(pdf_path: str) -> str:
+
+    import PyPDF2
 
     """
     Scrape all the text content from a PDF file.
@@ -57,8 +57,3 @@ def scrape_pdf_content(pdf_path: str) -> str:
         raise FileNotFoundError(f"The file {pdf_path} was not found.")
     except Exception as ex:
         raise Exception(f"An error occurred while processing the PDF: {ex}")
-
-
-
-
-

@@ -1,7 +1,6 @@
 import datetime
 import math
 
-
 def get_yesterday(format='%Y%m%d', days=1):
 
 	'''
@@ -16,7 +15,6 @@ def get_yesterday(format='%Y%m%d', days=1):
 
 	return (datetime.datetime.now() - datetime.timedelta(days=days)).strftime(format=format)
 
-
 def get_today(format:str='%Y%m%d'):
 	
 	'''
@@ -30,7 +28,6 @@ def get_today(format:str='%Y%m%d'):
 	'''
 
 	return (datetime.datetime.now()).strftime(format=format)
-
 
 def get_recent_monday(format:str='%Y%m%d'):
 
@@ -48,7 +45,6 @@ def get_recent_monday(format:str='%Y%m%d'):
 	current_weekday = datetime.datetime.today().weekday()
 	return (datetime.datetime.now() - datetime.timedelta(days = current_weekday)).strftime(format=format)
 
-
 def get_last_monday(format:str='%Y%m%d'):
 
 	'''
@@ -65,7 +61,6 @@ def get_last_monday(format:str='%Y%m%d'):
 	current_weekday = datetime.datetime.today().weekday()
 	return (datetime.datetime.now() - datetime.timedelta(days = current_weekday + 7)).strftime(format=format)
 
-
 def get_current_month_startdate(format:str='%Y%m%d'):
 
 	'''
@@ -79,7 +74,6 @@ def get_current_month_startdate(format:str='%Y%m%d'):
 
 	return datetime.datetime.today().replace(day=1).strftime(format=format)
 
-
 def get_current_year_startdate(format:str='%Y%m%d'):
 
 	'''
@@ -92,7 +86,6 @@ def get_current_year_startdate(format:str='%Y%m%d'):
 	'''
 
 	return datetime.datetime.today().replace(month=1, day=1).strftime(format=format)
-
 
 def month_reduction(month_delta:int, month_current:int, year_current:int) -> str:
 
@@ -114,7 +107,6 @@ def month_reduction(month_delta:int, month_current:int, year_current:int) -> str
 
 	final_year  = np.where(final_month == 0, final_year - 1, final_year)
 	final_month = np.where(final_month == 0, 12 , final_month)
-
 
 def get_time_month(delta_month:int, current_month:int, current_year:int) -> str:
 

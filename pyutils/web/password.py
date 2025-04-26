@@ -1,6 +1,6 @@
-import random, string
-
 def generate_password(length:str=12) -> str :
+
+    import random, string
 
     """
     Generate a random password string of a given length.

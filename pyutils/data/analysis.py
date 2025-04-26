@@ -1,6 +1,7 @@
-import pandas as pd
 
 def csv_analyzer(path_to_csv:str, single_column:str='', separator:str=','):
+
+	import pandas as pd
 
 	'''
 	Analyzes a CSV file and prints statistical information about it.

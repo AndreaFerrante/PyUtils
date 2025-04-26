@@ -1,7 +1,7 @@
-import socket
-
 
 def send_magic_packet(mac_address):
+
+    import socket
 
     try:
         mac_address = mac_address.replace(':', '')
