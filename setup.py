@@ -28,6 +28,8 @@ setup(
                                      'openai',
                                      'spacy',
                                      'tiktoken',
-                                     'youtube-transcript-api'],
+                                     'youtube-transcript-api',
+                                     'PyPDF2',
+                                     'reportlab'],
     py_modules                    = ['pyutils']
 )

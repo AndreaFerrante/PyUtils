@@ -9,7 +9,7 @@ from datetime import datetime
 
 class OpenAICollector:
 
-    def __init__(self, api_key:str, content:str="", max_retries:int=5, timeout:float=30.0, model:str="", embedder:str=""):
+    def __init__(self, api_key:str, content:str="", max_retries:int=5, timeout:float=125.0, model:str="", embedder:str=""):
 
         self.api_key     = api_key
         self.timeout     = timeout
