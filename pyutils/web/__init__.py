@@ -17,3 +17,12 @@ from pyutils.web.youtuber import (
 	fetch_transcript,
 	save_transcript_to_text
 )
+
+__all__ = ["generate_password",
+		   "dummy_web_server",
+		   "simple_scrape",
+		   "email_sender",
+		   "send_magic_packet",
+		   "extract_video_id",
+		   "fetch_transcript",
+		   "save_transcript_to_text"]
