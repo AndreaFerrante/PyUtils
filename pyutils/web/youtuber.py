@@ -3,9 +3,10 @@ import sys
 import json
 import logging
 import argparse
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional
 from urllib.parse import urlparse, parse_qs
 import re
+
 
 try:
     from youtube_transcript_api import YouTubeTranscriptApi
@@ -21,7 +22,7 @@ except ImportError:
     print("Install it with: pip install youtube-transcript-api")
     sys.exit(1)
 
-# Configure logging
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -34,9 +35,6 @@ logger = logging.getLogger(__name__)
 
 
 class YouTubeTranscriptExtractor:
-    """
-    A robust YouTube transcript extractor with error handling and multiple output formats.
-    """
     
     def __init__(self):
         self.text_formatter = TextFormatter()
@@ -237,10 +235,9 @@ class YouTubeTranscriptExtractor:
         return f"{hours:02d}:{minutes:02d}:{seconds:06.3f}".replace('.', ',')
     
     def save_transcript(
-        self, 
-        transcript: str, 
-        output_path: str, 
-        video_id: str,
+        self,
+        transcript: str,
+        output_path: str,
         format_type: str = 'text'
     ) -> bool:
         """
@@ -249,17 +246,15 @@ class YouTubeTranscriptExtractor:
         Args:
             transcript: Formatted transcript content
             output_path: Output file path
-            video_id: YouTube video ID
             format_type: Format type for extension
             
         Returns:
             True if successful, False otherwise
         """
         try:
-            # Create directory if it doesn't exist
+            
             os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else '.', exist_ok=True)
             
-            # Add appropriate extension if not present
             extensions = {'text': '.txt', 'json': '.json', 'srt': '.srt'}
             if not output_path.endswith(extensions.get(format_type, '.txt')):
                 output_path += extensions.get(format_type, '.txt')
@@ -276,17 +271,17 @@ class YouTubeTranscriptExtractor:
 
 
 def main():
-    """Main function to run the transcript extractor."""
+    
     parser = argparse.ArgumentParser(
         description='Extract transcripts from YouTube videos',
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-    python youtube_transcript.py https://www.youtube.com/watch?v=dQw4w9WgXcQ
-    python youtube_transcript.py dQw4w9WgXcQ --language en es --format json
-    python youtube_transcript.py "https://youtu.be/dQw4w9WgXcQ" --output transcript.txt
-        """
-    )
+        epilog= """
+                Examples:
+                    python youtube_transcript.py https://www.youtube.com/watch?v=dQw4w9WgXcQ
+                    python youtube_transcript.py dQw4w9WgXcQ --language en es --format json
+                    python youtube_transcript.py "https://youtu.be/dQw4w9WgXcQ" --output transcript.txt
+                """
+        )
     
     parser.add_argument(
         'url',
@@ -326,25 +321,21 @@ Examples:
     
     args = parser.parse_args()
     
-    # Initialize extractor
     extractor = YouTubeTranscriptExtractor()
-    
-    # Extract video ID
     video_id = extractor.extract_video_id(args.url)
+    
     if not video_id:
         logger.error("Invalid YouTube URL or video ID")
         sys.exit(1)
     
     logger.info(f"Processing video ID: {video_id}")
     
-    # Show transcript info if requested
     if args.info:
         info = extractor.get_available_transcripts(video_id)
         if info:
             print(json.dumps(info, indent=2))
         sys.exit(0)
     
-    # Extract transcript
     transcript_data = extractor.extract_transcript(
         video_id,
         language_codes=args.language,
@@ -355,17 +346,14 @@ Examples:
         logger.error("Failed to extract transcript")
         sys.exit(1)
     
-    # Format transcript
     formatted_transcript = extractor.format_transcript(transcript_data, args.format)
     
-    # Determine output path
     if args.output:
         output_path = args.output
     else:
         extensions = {'text': '.txt', 'json': '.json', 'srt': '.srt'}
         output_path = f"{video_id}_transcript{extensions[args.format]}"
     
-    # Save transcript
     if extractor.save_transcript(formatted_transcript, output_path, video_id, args.format):
         print(f"Transcript successfully saved to: {output_path}")
     else:

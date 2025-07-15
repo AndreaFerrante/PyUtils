@@ -1,6 +1,7 @@
 import time
 import base64
 import requests
+import argparse
 import tiktoken
 import pandas as pd
 from openai import OpenAI
@@ -212,3 +213,51 @@ class OpenAICollector:
             num_tokens = len(encoding.encode(text_to_tokenize))
 
         return num_tokens
+
+
+def main():
+    
+    parser=argparse.ArgumentParser(
+    description='Manages OpenAI API class interface to submit prompts',
+    formatter_class=argparse.RawDescriptionHelpFormatter,
+    epilog= """
+            Examples:
+
+            """
+    )
+    
+    parser.add_argument(
+        '--query',
+        '-q',
+        required=True,
+        help='Prompt to submit to OpenAI'
+    )
+    
+    parser.add_argument(
+        '--api_key',
+        '-ak',
+        required=True,
+        help='Submit API Key for OpenAI'
+    )
+    
+    parser.add_argument(
+        '--content',
+        '-c',
+        required=False,
+        help='OpenAI system content'
+    )
+    
+    parser.add_argument(
+        '--model',
+        '-m',
+        required=False,
+        help='OpenAI model to be used (default GPT 4o)'
+    )
+    
+    args = parser.parse_args()
+    
+    openai_collector = OpenAICollector(api_key = args.api_key,
+                                       conten  = args.content)
+    
+if __name__ == '__main__':
+    main()
