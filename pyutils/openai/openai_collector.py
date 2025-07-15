@@ -115,7 +115,7 @@ class OpenAICollector:
                 'model_owned_by':          model_owned_by
             }).sort_values(['model_name', 'model_creation_datetime'], ascending=[True, False])
 
-            return models
+            return models.sort_values('model_creation_datetime', ascending=False).reset_index(drop=True)
 
         except requests.exceptions.RequestException as ex:
             raise Exception(f"While requesting all OpenAI models, this error occured: {ex}")
@@ -217,10 +217,10 @@ class OpenAICollector:
 
 def main():
     
-    parser=argparse.ArgumentParser(
-    description='Manages OpenAI API class interface to submit prompts',
-    formatter_class=argparse.RawDescriptionHelpFormatter,
-    epilog= """
+    parser          = argparse.ArgumentParser(
+    description     = 'Manages OpenAI API class interface to submit prompts',
+    formatter_class = argparse.RawDescriptionHelpFormatter,
+    epilog          = """
             Examples:
 
             """
@@ -236,28 +236,30 @@ def main():
     parser.add_argument(
         '--api_key',
         '-ak',
-        required=True,
-        help='Submit API Key for OpenAI'
+        required = True,
+        help     = 'Submit API Key for OpenAI'
     )
     
     parser.add_argument(
         '--content',
         '-c',
-        required=False,
-        help='OpenAI system content'
+        required = False,
+        default  = 'You are an AI assistant expert in coding.',
+        help     = 'OpenAI system content'
     )
     
     parser.add_argument(
         '--model',
         '-m',
-        required=False,
-        help='OpenAI model to be used (default GPT 4o)'
+        required = False,
+        default  = 'gpt-4.1-nano',
+        help     = 'OpenAI model to be used (default gpt-4.1-nano)'
     )
     
     args = parser.parse_args()
     
     openai_collector = OpenAICollector(api_key = args.api_key,
-                                       conten  = args.content)
+                                       content = args.content)
     
 if __name__ == '__main__':
     main()
