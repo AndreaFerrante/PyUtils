@@ -224,18 +224,18 @@ def main():
         description="Compress all .txt files in a directory using 7zip compression",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Compression Levels:
-  1-2: Fast compression (lower ratios, faster)
-  3-5: Balanced compression (good ratio vs speed)
-  6-7: High compression (better ratios, slower)
-  8-9: Ultra compression (maximum ratios, slowest)
+                Compression Levels:
+                1-2: Fast compression (lower ratios, faster)
+                3-5: Balanced compression (good ratio vs speed)
+                6-7: High compression (better ratios, slower)
+                8-9: Ultra compression (maximum ratios, slowest)
 
-Examples:
-  %(prog)s /path/to/txt/files --level 6
-  %(prog)s ./documents --level 9 --output ./compressed --format zip
-  %(prog)s ~/texts -l 1 --remove-original --single-archive
-  %(prog)s ./files --level 8 --archive-name "my_texts"
-        """
+                Examples:
+                %(prog)s /path/to/txt/files --level 6
+                %(prog)s ./documents --level 9 --output ./compressed --format zip
+                %(prog)s ~/texts -l 1 --remove-original --single-archive
+                %(prog)s ./files --level 8 --archive-name "my_texts"
+                """
     )
     
     parser.add_argument(
@@ -245,7 +245,8 @@ Examples:
     )
     
     parser.add_argument(
-        '-l', '--level',
+        '-l', 
+        '--level',
         type=int,
         choices=range(1, 10),
         default=6,
@@ -253,13 +254,15 @@ Examples:
     )
     
     parser.add_argument(
-        '-o', '--output',
+        '-o', 
+        '--output',
         type=Path,
         help='Output directory for compressed files (default: same as input directory)'
     )
     
     parser.add_argument(
-        '-f', '--format',
+        '-f', 
+        '--format',
         choices=['7z', 'zip', 'tar', 'gzip'],
         default='7z',
         help='Archive format (default: 7z)'
@@ -290,14 +293,14 @@ Examples:
     )
     
     parser.add_argument(
-        '-v', '--verbose',
+        '-v', 
+        '--verbose',
         action='store_true',
         help='Enable verbose output'
     )
     
     args = parser.parse_args()
     
-    # Check 7zip installation
     try:
         sevenz_cmd = check_7zip_installation()
         if args.verbose:
@@ -305,8 +308,8 @@ Examples:
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
-    
-    # Validate and prepare directories
+
+
     try:
         input_dir = args.directory.resolve()
         txt_files = get_txt_files(input_dir)
@@ -423,3 +426,4 @@ Examples:
 
 if __name__ == "__main__":
     sys.exit(main())
+    
