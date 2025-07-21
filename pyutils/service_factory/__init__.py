@@ -1,3 +1,8 @@
+from pyutils.service_factory.compressor import (
+	compress_file,
+	get_txt_files
+ )
+
 from pyutils.service_factory.anonymizer import (
 	Anonymizer
 )
