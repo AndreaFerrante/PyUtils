@@ -31,7 +31,9 @@ from pyutils.service_factory.pdf import (
 	scrape_pdf_content
 )
 
-__all__ = ["Anonymizer",
+__all__ = ["compress_file",
+           "get_txt_files",
+    	   "Anonymizer",
 		   "get_today",
 		   "get_yesterday",
 		   "get_recent_monday",
