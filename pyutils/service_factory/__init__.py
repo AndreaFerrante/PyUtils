@@ -1,7 +1,15 @@
 from pyutils.service_factory.compressor import (
 	compress_file,
 	get_txt_files
- )
+)
+
+from pyutils.service_factory.compressor7z import (
+	check_7zip_installation,
+	get_txt_files,
+ 	get_compression_args,
+  	compress_file,
+    compress_multiple_files
+)
 
 from pyutils.service_factory.anonymizer import (
 	Anonymizer
