@@ -249,6 +249,17 @@ class OllamaCollector:
                     delay *= 2
         raise last_exc
 
+    def _check_context(self, response: Any) -> None:
+        """Warn when the context window usage exceeds the configured threshold."""
+        used = getattr(response, "prompt_eval_count", None) or 0
+        if used and used >= self.context_limit * self.context_warn_threshold:
+            pct = used / self.context_limit
+            warnings.warn(
+                f"Context at {pct:.0%} of limit ({used}/{self.context_limit} tokens). "
+                "Consider trimming message history.",
+                stacklevel=3,
+            )
+
     # ------------------------------------------------------------------
     # Model management
     # ------------------------------------------------------------------

@@ -1,4 +1,5 @@
 import asyncio
+import warnings as _warnings_module
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch, call
 
@@ -882,3 +883,35 @@ def test_package_exports_web_tools():
     assert callable(web_fetch)
     assert OllamaCollector.WEB_TOOLS[0] is web_search
     assert OllamaCollector.WEB_TOOLS[1] is web_fetch
+
+
+# ---------------------------------------------------------------------------
+# _check_context
+# ---------------------------------------------------------------------------
+
+def test_check_context_warns_at_threshold(collector):
+    response = _make_chat_response()
+    response.prompt_eval_count = 3400  # 83% of default 4096 limit
+    with _warnings_module.catch_warnings(record=True) as caught:
+        _warnings_module.simplefilter("always")
+        collector._check_context(response)
+    assert len(caught) == 1
+    assert "Context at" in str(caught[0].message)
+    assert "3400/4096" in str(caught[0].message)
+
+
+def test_check_context_no_warn_below_threshold(collector):
+    response = _make_chat_response()
+    response.prompt_eval_count = 1000  # 24% — below 80% threshold
+    with _warnings_module.catch_warnings(record=True) as caught:
+        _warnings_module.simplefilter("always")
+        collector._check_context(response)
+    assert len(caught) == 0
+
+
+def test_check_context_no_warn_when_prompt_eval_count_missing(collector):
+    response = MagicMock(spec=[])  # no attributes
+    with _warnings_module.catch_warnings(record=True) as caught:
+        _warnings_module.simplefilter("always")
+        collector._check_context(response)
+    assert len(caught) == 0
