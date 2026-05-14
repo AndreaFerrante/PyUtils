@@ -91,7 +91,7 @@ def email_sender(smtp_server:str=None,
 
 
     params = locals()
-    for k, v in params:
+    for k, v in params.items():
         if v is None:
             print(f'Parameter {k} is None. Pass a string value')
             return
