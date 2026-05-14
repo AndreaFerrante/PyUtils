@@ -4,15 +4,25 @@ Uses the native `ollama` Python package for full access to Ollama-native
 features unavailable through the OpenAI-compatible layer: callable tools with
 auto-docstring descriptions, thinking/reasoning budgets, Pydantic structured
 output, model management, token usage on every response, and first-class async.
+
+Web search requires OLLAMA_API_KEY env var (free account at
+https://ollama.com/settings/keys). Pass ``web_search=True`` to any chat method
+to give the model access to ``web_search`` and ``web_fetch`` tools before it
+produces a final answer.
 """
 
 import argparse
 import asyncio
 import base64
+import json
+import os
+import urllib.error
+import urllib.request
 from typing import (
     Any,
     AsyncGenerator,
     Callable,
+    ClassVar,
     Dict,
     Generator,
     List,
@@ -29,12 +39,107 @@ from ollama import AsyncClient, Client
 Think = Optional[Union[bool, Literal["low", "medium", "high"]]]
 Tools = Optional[List[Union[Callable, Dict[str, Any]]]]
 
+_OLLAMA_CLOUD_API = "https://ollama.com/api"
+
+
+# ----------------------------------------------------------------------
+# Web tools — standalone callables; injected via web_search=True
+# ----------------------------------------------------------------------
+
+def web_search(query: str, max_results: int = 5) -> str:
+    """Search the internet for current information about a topic.
+
+    Args:
+        query: Search query string.
+        max_results: Maximum number of results to return (1-10).
+
+    Returns:
+        Formatted string with search results including titles, URLs, and snippets.
+    """
+    api_key = os.environ.get("OLLAMA_API_KEY", "")
+    if not api_key:
+        return (
+            "Error: OLLAMA_API_KEY environment variable not set. "
+            "Get a free key at https://ollama.com/settings/keys"
+        )
+
+    payload = json.dumps({"query": query, "max_results": max_results}).encode()
+    req = urllib.request.Request(
+        f"{_OLLAMA_CLOUD_API}/web_search",
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read())
+    except urllib.error.HTTPError as ex:
+        return f"Web search failed (HTTP {ex.code}): {ex.reason}"
+    except Exception as ex:
+        return f"Web search failed: {ex}"
+
+    results = data.get("results", [])
+    if not results:
+        return "No results found."
+
+    lines = []
+    for i, r in enumerate(results, 1):
+        lines.append(
+            f"[{i}] {r.get('title', '')}\n"
+            f"{r.get('url', '')}\n"
+            f"{r.get('content', '')}"
+        )
+    return "\n\n".join(lines)
+
+
+def web_fetch(url: str) -> str:
+    """Fetch and return the main text content of a webpage.
+
+    Args:
+        url: Full URL of the page to retrieve.
+
+    Returns:
+        Page title and main text content.
+    """
+    api_key = os.environ.get("OLLAMA_API_KEY", "")
+    if not api_key:
+        return (
+            "Error: OLLAMA_API_KEY environment variable not set. "
+            "Get a free key at https://ollama.com/settings/keys"
+        )
+
+    payload = json.dumps({"url": url}).encode()
+    req = urllib.request.Request(
+        f"{_OLLAMA_CLOUD_API}/web_fetch",
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = json.loads(resp.read())
+    except urllib.error.HTTPError as ex:
+        return f"Web fetch failed (HTTP {ex.code}): {ex.reason}"
+    except Exception as ex:
+        return f"Web fetch failed: {ex}"
+
+    title = data.get("title", "")
+    content = data.get("content", "")
+    return f"Title: {title}\n\n{content}"
+
 
 class OllamaCollector:
     """Ollama LLM client for agentic pipelines.
 
     Sync and async chat, streaming, tool-call loops, structured output,
     vision, embeddings, and model management — all via the native ollama SDK.
+
+    Set OLLAMA_API_KEY in the environment to enable web_search=True on any
+    chat method.
     """
 
     DEFAULT_HOST     = "http://localhost:11434"
@@ -45,6 +150,8 @@ class OllamaCollector:
         "expertise in machine learning. You work with precision and always take "
         "the time to carefully craft the best possible answer."
     )
+
+    WEB_TOOLS: ClassVar[List[Callable]] = [web_search, web_fetch]
 
     def __init__(
         self,
@@ -178,12 +285,27 @@ class OllamaCollector:
 
     def ask(
         self,
-        query: str,
-        model: str   = "",
-        think: Think = None,
-        timer: bool  = False,
+        query:      str,
+        model:      str   = "",
+        think:      Think = None,
+        timer:      bool  = False,
+        web_search: bool  = False,
     ) -> str:
-        """Single-turn query with system prompt. Returns assistant text."""
+        """Single-turn query with system prompt. Returns assistant text.
+
+        Args:
+            web_search: When True, the model may call ``web_search`` and
+                ``web_fetch`` before producing its final answer. Requires
+                OLLAMA_API_KEY in the environment.
+        """
+        if web_search:
+            return self.run_with_tools(
+                query     = query,
+                tools     = self.WEB_TOOLS,
+                model     = model,
+                think     = think,
+            )
+
         kwargs: Dict[str, Any] = {
             "model":    model or self.model,
             "messages": [
@@ -208,29 +330,38 @@ class OllamaCollector:
 
     def chat(
         self,
-        messages: List[Dict[str, Any]],
-        model:    str   = "",
-        tools:    Tools = None,
-        think:    Think = None,
-        format:   Any   = None,
+        messages:   List[Dict[str, Any]],
+        model:      str   = "",
+        tools:      Tools = None,
+        think:      Think = None,
+        format:     Any   = None,
+        web_search: bool  = False,
     ) -> Union[str, "ollama.Message"]:
         """Multi-turn chat accepting full message history.
 
         Returns str when the model produces a final answer.
         Returns the raw Message when finish_reason is 'tool_calls' so the
         caller can handle dispatch and continue the loop manually.
+
+        Args:
+            web_search: When True, prepends ``web_search`` and ``web_fetch``
+                to the tools list. Requires OLLAMA_API_KEY in the environment.
         """
+        effective_tools = (
+            [*self.WEB_TOOLS, *(tools or [])] if web_search else tools
+        )
+
         kwargs: Dict[str, Any] = {
             "model":    model or self.model,
             "messages": messages,
         }
-        if tools  is not None: kwargs["tools"]  = tools
-        if think  is not None: kwargs["think"]  = think
-        if format is not None: kwargs["format"] = format
+        if effective_tools is not None: kwargs["tools"]  = effective_tools
+        if think           is not None: kwargs["think"]  = think
+        if format          is not None: kwargs["format"] = format
 
         response = self._client.chat(**kwargs)
 
-        if tools and response.message.tool_calls:
+        if effective_tools and response.message.tool_calls:
             return response.message
 
         return response.message.content
@@ -266,11 +397,12 @@ class OllamaCollector:
 
     def run_with_tools(
         self,
-        query:     str,
-        tools:     List[Callable],
-        model:     str   = "",
-        max_turns: int   = 10,
-        think:     Think = None,
+        query:      str,
+        tools:      List[Callable],
+        model:      str   = "",
+        max_turns:  int   = 10,
+        think:      Think = None,
+        web_search: bool  = False,
     ) -> str:
         """Agentic loop: auto-dispatches tool calls until model returns final text.
 
@@ -278,21 +410,24 @@ class OllamaCollector:
         descriptions and infers parameter schemas from type annotations.
 
         Args:
-            tools:     Python callables with type-annotated signatures and docstrings.
-            max_turns: Safety ceiling on tool-call iterations.
+            tools:      Python callables with type-annotated signatures and docstrings.
+            max_turns:  Safety ceiling on tool-call iterations.
+            web_search: When True, prepends ``web_search`` and ``web_fetch``
+                to the tools list. Requires OLLAMA_API_KEY in the environment.
 
         Raises:
             ValueError:   Model called an unknown tool.
             RuntimeError: Loop exceeded max_turns without a final answer.
         """
-        tool_map = {fn.__name__: fn for fn in tools}
+        effective_tools = [*self.WEB_TOOLS, *tools] if web_search else tools
+        tool_map = {fn.__name__: fn for fn in effective_tools}
         messages: List[Dict[str, Any]] = [
             {"role": "system", "content": self.content},
             {"role": "user",   "content": query},
         ]
         call_kwargs: Dict[str, Any] = {
             "model": model or self.model,
-            "tools": tools,
+            "tools": effective_tools,
         }
         if think is not None:
             call_kwargs["think"] = think
@@ -376,11 +511,26 @@ class OllamaCollector:
 
     async def async_ask(
         self,
-        query: str,
-        model: str   = "",
-        think: Think = None,
+        query:      str,
+        model:      str   = "",
+        think:      Think = None,
+        web_search: bool  = False,
     ) -> str:
-        """Async single-turn query with system prompt."""
+        """Async single-turn query with system prompt.
+
+        Args:
+            web_search: When True, the model may call ``web_search`` and
+                ``web_fetch`` before producing its final answer. Requires
+                OLLAMA_API_KEY in the environment.
+        """
+        if web_search:
+            return await self.async_run_with_tools(
+                query    = query,
+                tools    = self.WEB_TOOLS,
+                model    = model,
+                think    = think,
+            )
+
         kwargs: Dict[str, Any] = {
             "model":    model or self.model,
             "messages": [
@@ -400,24 +550,34 @@ class OllamaCollector:
 
     async def async_chat(
         self,
-        messages: List[Dict[str, Any]],
-        model:    str   = "",
-        tools:    Tools = None,
-        think:    Think = None,
-        format:   Any   = None,
+        messages:   List[Dict[str, Any]],
+        model:      str   = "",
+        tools:      Tools = None,
+        think:      Think = None,
+        format:     Any   = None,
+        web_search: bool  = False,
     ) -> Union[str, "ollama.Message"]:
-        """Async multi-turn chat. Same semantics as sync chat()."""
+        """Async multi-turn chat. Same semantics as sync chat().
+
+        Args:
+            web_search: When True, prepends ``web_search`` and ``web_fetch``
+                to the tools list. Requires OLLAMA_API_KEY in the environment.
+        """
+        effective_tools = (
+            [*self.WEB_TOOLS, *(tools or [])] if web_search else tools
+        )
+
         kwargs: Dict[str, Any] = {
             "model":    model or self.model,
             "messages": messages,
         }
-        if tools  is not None: kwargs["tools"]  = tools
-        if think  is not None: kwargs["think"]  = think
-        if format is not None: kwargs["format"] = format
+        if effective_tools is not None: kwargs["tools"]  = effective_tools
+        if think           is not None: kwargs["think"]  = think
+        if format          is not None: kwargs["format"] = format
 
         response = await self._async_client.chat(**kwargs)
 
-        if tools and response.message.tool_calls:
+        if effective_tools and response.message.tool_calls:
             return response.message
 
         return response.message.content
@@ -453,21 +613,28 @@ class OllamaCollector:
 
     async def async_run_with_tools(
         self,
-        query:     str,
-        tools:     List[Callable],
-        model:     str   = "",
-        max_turns: int   = 10,
-        think:     Think = None,
+        query:      str,
+        tools:      List[Callable],
+        model:      str   = "",
+        max_turns:  int   = 10,
+        think:      Think = None,
+        web_search: bool  = False,
     ) -> str:
-        """Async agentic loop. Same semantics as sync run_with_tools()."""
-        tool_map = {fn.__name__: fn for fn in tools}
+        """Async agentic loop. Same semantics as sync run_with_tools().
+
+        Args:
+            web_search: When True, prepends ``web_search`` and ``web_fetch``
+                to the tools list. Requires OLLAMA_API_KEY in the environment.
+        """
+        effective_tools = [*self.WEB_TOOLS, *tools] if web_search else tools
+        tool_map = {fn.__name__: fn for fn in effective_tools}
         messages: List[Dict[str, Any]] = [
             {"role": "system", "content": self.content},
             {"role": "user",   "content": query},
         ]
         call_kwargs: Dict[str, Any] = {
             "model": model or self.model,
-            "tools": tools,
+            "tools": effective_tools,
         }
         if think is not None:
             call_kwargs["think"] = think
@@ -485,7 +652,6 @@ class OllamaCollector:
                     raise ValueError(f"Model called unknown tool: {call.function.name!r}")
 
                 result = fn(**call.function.arguments)
-                # support async tools transparently
                 if asyncio.iscoroutine(result):
                     result = await result
 
@@ -512,26 +678,27 @@ def main() -> None:
 Examples:
     python ollama_collector.py -q "Explain transformers in one sentence"
     python ollama_collector.py -q "What is RAG?" -m mistral --host http://remote:11434
+    python ollama_collector.py -q "Latest AI news" --web-search
     python ollama_collector.py -q "Summarise this" -m llama3.2 --stream
         """,
     )
-    parser.add_argument("--query",   "-q", required=True,  help="Prompt to submit")
-    parser.add_argument("--host",          default=OllamaCollector.DEFAULT_HOST, help="Ollama host URL")
-    parser.add_argument("--model",   "-m", default="",     help="Model name (default: llama3.2)")
-    parser.add_argument("--content", "-c", default="",     help="System prompt override")
-    parser.add_argument("--stream",  "-s", action="store_true", help="Stream output tokens")
+    parser.add_argument("--query",      "-q", required=True,       help="Prompt to submit")
+    parser.add_argument("--host",             default=OllamaCollector.DEFAULT_HOST, help="Ollama host URL")
+    parser.add_argument("--model",      "-m", default="",          help="Model name (default: llama3.2)")
+    parser.add_argument("--content",    "-c", default="",          help="System prompt override")
+    parser.add_argument("--stream",     "-s", action="store_true", help="Stream output tokens")
+    parser.add_argument("--web-search", "-w", action="store_true", help="Enable web search before answering (requires OLLAMA_API_KEY)")
 
     args      = parser.parse_args()
     collector = OllamaCollector(host=args.host, content=args.content, model=args.model)
 
-    messages = [{"role": "user", "content": args.query}]
-
     if args.stream:
+        messages = [{"role": "user", "content": args.query}]
         for token in collector.stream_chat(messages):
             print(token, end="", flush=True)
         print()
     else:
-        print(collector.ask(args.query))
+        print(collector.ask(args.query, web_search=args.web_search))
 
 
 if __name__ == "__main__":

@@ -577,3 +577,223 @@ def test_async_run_with_tools_raises_after_max_turns(collector):
 
     with pytest.raises(RuntimeError, match="max_turns"):
         asyncio.run(_run())
+
+
+# ---------------------------------------------------------------------------
+# web_search / web_fetch — module-level functions
+# ---------------------------------------------------------------------------
+
+class TestWebSearch:
+    def test_returns_error_without_api_key(self, monkeypatch):
+        from pyutils.ollama.ollama_collector import web_search
+        monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
+        result = web_search("test query")
+        assert "OLLAMA_API_KEY" in result
+
+    def test_formats_results(self, monkeypatch):
+        from pyutils.ollama.ollama_collector import web_search
+        import json, urllib.request
+
+        monkeypatch.setenv("OLLAMA_API_KEY", "test-key")
+        payload = json.dumps({
+            "results": [
+                {"title": "Page A", "url": "https://a.com", "content": "snippet a"},
+                {"title": "Page B", "url": "https://b.com", "content": "snippet b"},
+            ]
+        }).encode()
+
+        class FakeResp:
+            def read(self): return payload
+            def __enter__(self): return self
+            def __exit__(self, *_): pass
+
+        monkeypatch.setattr(urllib.request, "urlopen", lambda *_a, **_k: FakeResp())
+        result = web_search("test")
+        assert "[1]" in result
+        assert "Page A" in result
+        assert "https://a.com" in result
+        assert "[2]" in result
+
+    def test_no_results_message(self, monkeypatch):
+        from pyutils.ollama.ollama_collector import web_search
+        import json, urllib.request
+
+        monkeypatch.setenv("OLLAMA_API_KEY", "test-key")
+        payload = json.dumps({"results": []}).encode()
+
+        class FakeResp:
+            def read(self): return payload
+            def __enter__(self): return self
+            def __exit__(self, *_): pass
+
+        monkeypatch.setattr(urllib.request, "urlopen", lambda *_a, **_k: FakeResp())
+        assert web_search("nothing") == "No results found."
+
+    def test_http_error_returns_message(self, monkeypatch):
+        from pyutils.ollama.ollama_collector import web_search
+        import urllib.error, urllib.request
+
+        monkeypatch.setenv("OLLAMA_API_KEY", "test-key")
+
+        def _raise(*_a, **_k):
+            raise urllib.error.HTTPError(None, 401, "Unauthorized", {}, None)
+
+        monkeypatch.setattr(urllib.request, "urlopen", _raise)
+        result = web_search("test")
+        assert "401" in result
+
+
+class TestWebFetch:
+    def test_returns_error_without_api_key(self, monkeypatch):
+        from pyutils.ollama.ollama_collector import web_fetch
+        monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
+        result = web_fetch("https://example.com")
+        assert "OLLAMA_API_KEY" in result
+
+    def test_formats_title_and_content(self, monkeypatch):
+        from pyutils.ollama.ollama_collector import web_fetch
+        import json, urllib.request
+
+        monkeypatch.setenv("OLLAMA_API_KEY", "test-key")
+        payload = json.dumps({"title": "Example", "content": "Hello world"}).encode()
+
+        class FakeResp:
+            def read(self): return payload
+            def __enter__(self): return self
+            def __exit__(self, *_): pass
+
+        monkeypatch.setattr(urllib.request, "urlopen", lambda *_a, **_k: FakeResp())
+        result = web_fetch("https://example.com")
+        assert "Title: Example" in result
+        assert "Hello world" in result
+
+    def test_http_error_returns_message(self, monkeypatch):
+        from pyutils.ollama.ollama_collector import web_fetch
+        import urllib.error, urllib.request
+
+        monkeypatch.setenv("OLLAMA_API_KEY", "test-key")
+
+        def _raise(*_a, **_k):
+            raise urllib.error.HTTPError(None, 403, "Forbidden", {}, None)
+
+        monkeypatch.setattr(urllib.request, "urlopen", _raise)
+        result = web_fetch("https://example.com")
+        assert "403" in result
+
+
+# ---------------------------------------------------------------------------
+# ask / async_ask — web_search=True routing
+# ---------------------------------------------------------------------------
+
+
+def test_ask_web_search_true_uses_web_tools(collector):
+    """ask(web_search=True) passes WEB_TOOLS to the chat call."""
+    collector._client.chat.return_value = _make_chat_response("web answer")
+
+    from unittest.mock import patch as _patch
+    import pyutils.ollama.ollama_collector as _mod
+
+    fake_search = MagicMock(return_value="result", __name__="web_search")
+    fake_search.__doc__ = "Search the internet."
+    fake_fetch  = MagicMock(return_value="page",   __name__="web_fetch")
+    fake_fetch.__doc__ = "Fetch a page."
+
+    original = _mod.OllamaCollector.WEB_TOOLS
+    collector.WEB_TOOLS = [fake_search, fake_fetch]
+    try:
+        result = collector.ask("current events", web_search=True)
+        assert result == "web answer"
+        _, kwargs = collector._client.chat.call_args
+        assert fake_search in kwargs["tools"]
+        assert fake_fetch  in kwargs["tools"]
+    finally:
+        collector.WEB_TOOLS = original
+
+
+def test_async_ask_web_search_true_uses_web_tools(collector):
+    async def _run():
+        collector._async_client.chat = AsyncMock(
+            return_value=_make_chat_response("async web answer")
+        )
+        import pyutils.ollama.ollama_collector as _mod
+
+        fake_search = MagicMock(return_value="r", __name__="web_search")
+        fake_search.__doc__ = "Search."
+        fake_fetch  = MagicMock(return_value="p", __name__="web_fetch")
+        fake_fetch.__doc__ = "Fetch."
+
+        original = collector.WEB_TOOLS
+        collector.WEB_TOOLS = [fake_search, fake_fetch]
+        try:
+            result = await collector.async_ask("news", web_search=True)
+        finally:
+            collector.WEB_TOOLS = original
+        return result
+
+    assert asyncio.run(_run()) == "async web answer"
+
+
+# ---------------------------------------------------------------------------
+# run_with_tools — web_search=True prepends WEB_TOOLS
+# ---------------------------------------------------------------------------
+
+def test_run_with_tools_web_search_prepends_web_tools(collector):
+    collector._client.chat.return_value = _make_chat_response("done")
+
+    def my_tool(x: int) -> int:
+        """My custom tool."""
+        return x * 2
+
+    fake_search = MagicMock(return_value="results", __name__="web_search")
+    fake_search.__doc__ = "Search."
+    fake_fetch  = MagicMock(return_value="page",    __name__="web_fetch")
+    fake_fetch.__doc__ = "Fetch."
+
+    original = collector.WEB_TOOLS
+    collector.WEB_TOOLS = [fake_search, fake_fetch]
+    try:
+        result = collector.run_with_tools("help", tools=[my_tool], web_search=True)
+        assert result == "done"
+        _, kwargs = collector._client.chat.call_args
+        tool_names = [t.__name__ for t in kwargs["tools"]]
+        assert tool_names[0] == "web_search"
+        assert tool_names[1] == "web_fetch"
+        assert "my_tool" in tool_names
+    finally:
+        collector.WEB_TOOLS = original
+
+
+# ---------------------------------------------------------------------------
+# chat — web_search=True prepends WEB_TOOLS
+# ---------------------------------------------------------------------------
+
+def test_chat_web_search_prepends_web_tools(collector):
+    collector._client.chat.return_value = _make_chat_response("chat result")
+
+    fake_search = MagicMock(return_value="r", __name__="web_search")
+    fake_search.__doc__ = "Search."
+    fake_fetch  = MagicMock(return_value="p", __name__="web_fetch")
+    fake_fetch.__doc__ = "Fetch."
+
+    original = collector.WEB_TOOLS
+    collector.WEB_TOOLS = [fake_search, fake_fetch]
+    try:
+        msgs = [{"role": "user", "content": "hi"}]
+        collector.chat(msgs, web_search=True)
+        _, kwargs = collector._client.chat.call_args
+        assert fake_search in kwargs["tools"]
+        assert fake_fetch  in kwargs["tools"]
+    finally:
+        collector.WEB_TOOLS = original
+
+
+# ---------------------------------------------------------------------------
+# __init__.py exports
+# ---------------------------------------------------------------------------
+
+def test_package_exports_web_tools():
+    from pyutils.ollama import web_search, web_fetch, OllamaCollector
+    assert callable(web_search)
+    assert callable(web_fetch)
+    assert OllamaCollector.WEB_TOOLS[0] is web_search
+    assert OllamaCollector.WEB_TOOLS[1] is web_fetch
