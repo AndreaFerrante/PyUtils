@@ -45,7 +45,7 @@ def test_format_transcript_text():
     data = [{'text': 'Hello world', 'start': 0.0, 'duration': 2.0}]
     result = extractor.format_transcript(data, 'text')
     assert isinstance(result, str)
-    assert len(result) > 0
+    assert 'Hello world' in result
 
 
 def test_format_transcript_srt():
