@@ -43,13 +43,10 @@ def scrape_pdf_content(pdf_path: str) -> str:
     """
     try:
         with open(pdf_path, 'rb') as pdf_file:
-            pdf_reader = PyPDF2.PdfFileReader(pdf_file)
-            num_pages = pdf_reader.numPages
-
+            pdf_reader = PyPDF2.PdfReader(pdf_file)
             full_text = ""
-            for page_num in range(num_pages):
-                page = pdf_reader.getPage(page_num)
-                full_text += page.extract_text()
+            for page in pdf_reader.pages:
+                full_text += page.extract_text() or ""
 
         return full_text
 
