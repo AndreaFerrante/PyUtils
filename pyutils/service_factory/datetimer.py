@@ -1,5 +1,6 @@
 import datetime
 import math
+import numpy as np
 
 def get_yesterday(format='%Y%m%d', days=1):
 
@@ -107,6 +108,8 @@ def month_reduction(month_delta:int, month_current:int, year_current:int) -> str
 
 	final_year  = np.where(final_month == 0, final_year - 1, final_year)
 	final_month = np.where(final_month == 0, 12 , final_month)
+
+	return str(int(final_year)) + str(int(final_month)).zfill(2) + '01'
 
 def get_time_month(delta_month:int, current_month:int, current_year:int) -> str:
 
