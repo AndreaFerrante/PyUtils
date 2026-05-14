@@ -1,6 +1,40 @@
 [build-system]
-requires = [
-    "setuptools>=54",
-    "wheel"
-]
+requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyutils"
+version = "0.1.0"
+description = "Personal Python utility library"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Andrea Ferrante", email = "nonicknamethankyou@gmail.com" }]
+requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "pandas>=2.2.0",
+    "numpy>=1.26.0",
+    "openai>=1.0.0",
+    "spacy>=3.7.0",
+    "tiktoken>=0.6.0",
+    "youtube-transcript-api>=0.6.0",
+    "ollama>=0.4.0",
+    "PyPDF2>=3.0.0",
+    "reportlab>=4.0.0",
+    "beautifulsoup4>=4.12.0",
+    "requests>=2.31.0",
+    "psutil>=5.9.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/AndreaFerrante/PyUtils"
+
+[tool.setuptools.packages.find]
+exclude = ["tests*"]

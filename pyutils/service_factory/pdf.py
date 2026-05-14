@@ -1,56 +1,23 @@
+import PyPDF2
+from reportlab.pdfgen import canvas
 
-def pdf_generator_from_text(output_file:str, pdf_text:str) -> None:
 
-    from reportlab.pdfgen import canvas
+def pdf_generator_from_text(output_file: str, pdf_text: str) -> None:
+    """Generate a single-page PDF containing pdf_text at a fixed position."""
+    c = canvas.Canvas(output_file)
+    c.drawString(100, 750, pdf_text)
+    c.save()
 
-    """
-     Generate a PDF file with given text.
-
-     Parameters:
-     - output_file (str): The file path where the generated PDF should be saved.
-     - pdf_text (str): The text to be included in the PDF.
-
-     Returns:
-     - None
-     """
-
-    try:
-        c = canvas.Canvas(output_file)
-        c.drawString(100, 750, pdf_text)
-        c.save()
-
-    except Exception as ex:
-        print(f'Function pdf_generator give error {ex}')
 
 def scrape_pdf_content(pdf_path: str) -> str:
-
-    import PyPDF2
-
-    """
-    Scrape all the text content from a PDF file.
-
-    This function reads a PDF file from the given file path and extracts all the text content.
-
-    Args:
-        pdf_path (str): The path to the PDF file.
-
-    Returns:
-        str: A string containing all the text content from the PDF.
+    """Extract and return all text from a PDF file.
 
     Raises:
-        FileNotFoundError: Raised if the specified PDF file path does not exist.
-        Exception: Any exception raised by the PyPDF2 library.
+        FileNotFoundError: If pdf_path does not exist.
     """
     try:
-        with open(pdf_path, 'rb') as pdf_file:
-            pdf_reader = PyPDF2.PdfReader(pdf_file)
-            full_text = ""
-            for page in pdf_reader.pages:
-                full_text += page.extract_text() or ""
-
-        return full_text
-
+        with open(pdf_path, "rb") as fh:
+            reader = PyPDF2.PdfReader(fh)
+            return "".join(page.extract_text() or "" for page in reader.pages)
     except FileNotFoundError:
-        raise FileNotFoundError(f"The file {pdf_path} was not found.")
-    except Exception as ex:
-        raise Exception(f"An error occurred while processing the PDF: {ex}")
+        raise FileNotFoundError(f"PDF file not found: {pdf_path}")

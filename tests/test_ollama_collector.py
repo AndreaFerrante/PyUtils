@@ -1,338 +1,443 @@
+import asyncio
 import pytest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch, call
 
 
 # ---------------------------------------------------------------------------
-# Fixture
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _make_chat_response(content="answer", tool_calls=None, total_duration=1_000_000_000, eval_count=10):
+    r = MagicMock()
+    r.message.content    = content
+    r.message.tool_calls = tool_calls
+    r.total_duration     = total_duration
+    r.eval_count         = eval_count
+    return r
+
+
+def _make_tool_call(name, arguments):
+    tc = MagicMock()
+    tc.function.name      = name
+    tc.function.arguments = arguments
+    return tc
+
+
+# ---------------------------------------------------------------------------
+# Fixture — patches both Client and AsyncClient at import time
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
 def collector():
-    with patch("pyutils.ollama.ollama_collector.OpenAI") as mock_openai:
-        mock_client = MagicMock()
-        mock_openai.return_value = mock_client
+    with (
+        patch("pyutils.ollama.ollama_collector.Client")      as mock_client_cls,
+        patch("pyutils.ollama.ollama_collector.AsyncClient") as mock_async_cls,
+    ):
+        mock_sync  = MagicMock()
+        mock_async = MagicMock()
+        mock_client_cls.return_value = mock_sync
+        mock_async_cls.return_value  = mock_async
+
         from pyutils.ollama.ollama_collector import OllamaCollector
         c = OllamaCollector(model="llama3.2", embedder="nomic-embed-text")
-        c.client = mock_client
+        c._client       = mock_sync
+        c._async_client = mock_async
         yield c
 
 
 # ---------------------------------------------------------------------------
-# Init
+# __init__
 # ---------------------------------------------------------------------------
 
-def test_default_host_stripped():
-    with patch("pyutils.ollama.ollama_collector.OpenAI"):
-        from pyutils.ollama.ollama_collector import OllamaCollector
-        c = OllamaCollector(host="http://localhost:11434/")
-        assert c.host == "http://localhost:11434"
-
-
-def test_default_model_and_embedder():
-    with patch("pyutils.ollama.ollama_collector.OpenAI"):
+def test_defaults():
+    with (
+        patch("pyutils.ollama.ollama_collector.Client"),
+        patch("pyutils.ollama.ollama_collector.AsyncClient"),
+    ):
         from pyutils.ollama.ollama_collector import OllamaCollector
         c = OllamaCollector()
-        assert c.model == "llama3.2"
+        assert c.model    == "llama3.2"
         assert c.embedder == "nomic-embed-text"
+        assert c.host     == "http://localhost:11434"
 
 
-def test_custom_model_and_embedder():
-    with patch("pyutils.ollama.ollama_collector.OpenAI"):
+def test_custom_values():
+    with (
+        patch("pyutils.ollama.ollama_collector.Client"),
+        patch("pyutils.ollama.ollama_collector.AsyncClient"),
+    ):
         from pyutils.ollama.ollama_collector import OllamaCollector
-        c = OllamaCollector(model="mistral", embedder="mxbai-embed-large")
-        assert c.model == "mistral"
+        c = OllamaCollector(model="mistral", embedder="mxbai-embed-large", host="http://remote:11434")
+        assert c.model    == "mistral"
         assert c.embedder == "mxbai-embed-large"
+        assert c.host     == "http://remote:11434"
 
 
-def test_client_created_with_correct_base_url():
-    with patch("pyutils.ollama.ollama_collector.OpenAI") as mock_openai:
-        from pyutils.ollama.ollama_collector import OllamaCollector
-        OllamaCollector(host="http://localhost:11434")
-        mock_openai.assert_called_once_with(
-            base_url    = "http://localhost:11434/v1",
-            api_key     = "ollama",
-            max_retries = 5,
-            timeout     = 125.0,
-        )
-
-
-def test_repr_masks_nothing_but_shows_host(collector):
+def test_repr_shows_host_and_models(collector):
     r = repr(collector)
     assert "OllamaCollector" in r
-    assert "host=" in r
+    assert "host="  in r
     assert "model=" in r
 
 
+def test_client_receives_host_and_timeout():
+    with (
+        patch("pyutils.ollama.ollama_collector.Client")      as mock_c,
+        patch("pyutils.ollama.ollama_collector.AsyncClient") as mock_a,
+    ):
+        from pyutils.ollama.ollama_collector import OllamaCollector
+        OllamaCollector(host="http://myhost:11434", timeout=30.0)
+        mock_c.assert_called_once_with(host="http://myhost:11434", timeout=30.0)
+        mock_a.assert_called_once_with(host="http://myhost:11434", timeout=30.0)
+
+
 # ---------------------------------------------------------------------------
-# get_available_models_dataframe
+# ping
 # ---------------------------------------------------------------------------
 
-def test_get_available_models_dataframe_returns_dataframe(collector):
+def test_ping_returns_true_when_reachable(collector):
+    collector._client.list.return_value = MagicMock()
+    assert collector.ping() is True
+
+
+def test_ping_returns_false_on_error(collector):
+    collector._client.list.side_effect = ConnectionError("refused")
+    assert collector.ping() is False
+
+
+# ---------------------------------------------------------------------------
+# models
+# ---------------------------------------------------------------------------
+
+def test_models_returns_dataframe(collector):
     import pandas as pd
-    fake_response = MagicMock()
-    fake_response.json.return_value = {
-        "models": [
-            {
-                "name": "llama3.2:latest",
-                "size": 4_000_000_000,
-                "modified_at": "2024-01-01T00:00:00Z",
-                "details": {
-                    "parameter_size": "3B",
-                    "quantization_level": "Q4_K_M",
-                    "family": "llama",
-                },
-            }
-        ]
-    }
-    fake_response.raise_for_status = MagicMock()
 
-    with patch("pyutils.ollama.ollama_collector.requests.get", return_value=fake_response):
-        df = collector.get_available_models_dataframe()
+    m = MagicMock()
+    m.model        = "llama3.2:latest"
+    m.size         = 4_000_000_000
+    m.modified_at  = "2024-01-01"
+    m.details.parameter_size     = "3B"
+    m.details.quantization_level = "Q4_K_M"
+    m.details.family             = "llama"
 
+    collector._client.list.return_value.models = [m]
+
+    df = collector.models()
     assert isinstance(df, pd.DataFrame)
-    assert len(df) == 1
     assert df.iloc[0]["model_name"] == "llama3.2:latest"
-    assert df.iloc[0]["parameter_size"] == "3B"
+    assert df.iloc[0]["size_gb"]    == 4.0
 
 
-def test_get_available_models_dataframe_raises_on_connection_error(collector):
-    import requests as req
-    with patch("pyutils.ollama.ollama_collector.requests.get",
-               side_effect=req.exceptions.ConnectionError("refused")):
-        with pytest.raises(RuntimeError, match="Could not reach Ollama"):
-            collector.get_available_models_dataframe()
-
-
-# ---------------------------------------------------------------------------
-# get_tokens_count
-# ---------------------------------------------------------------------------
-
-def test_get_tokens_count_returns_int(collector):
-    fake_response = MagicMock()
-    fake_response.json.return_value = {"tokens": [1, 2, 3, 4, 5]}
-    fake_response.raise_for_status = MagicMock()
-
-    with patch("pyutils.ollama.ollama_collector.requests.post", return_value=fake_response):
-        count = collector.get_tokens_count("Hello world")
-
-    assert count == 5
-
-
-def test_get_tokens_count_uses_default_model(collector):
-    fake_response = MagicMock()
-    fake_response.json.return_value = {"tokens": [1]}
-    fake_response.raise_for_status = MagicMock()
-
-    with patch("pyutils.ollama.ollama_collector.requests.post", return_value=fake_response) as mock_post:
-        collector.get_tokens_count("test")
-        _, kwargs = mock_post.call_args
-        assert kwargs["json"]["model"] == "llama3.2"
-
-
-def test_get_tokens_count_uses_override_model(collector):
-    fake_response = MagicMock()
-    fake_response.json.return_value = {"tokens": [1, 2]}
-    fake_response.raise_for_status = MagicMock()
-
-    with patch("pyutils.ollama.ollama_collector.requests.post", return_value=fake_response) as mock_post:
-        collector.get_tokens_count("test", model="mistral")
-        _, kwargs = mock_post.call_args
-        assert kwargs["json"]["model"] == "mistral"
+def test_models_empty_when_no_models(collector):
+    import pandas as pd
+    collector._client.list.return_value.models = []
+    df = collector.models()
+    assert isinstance(df, pd.DataFrame)
+    assert len(df) == 0
 
 
 # ---------------------------------------------------------------------------
-# get_embeddings
+# running
 # ---------------------------------------------------------------------------
 
-def test_get_embeddings_uses_default_embedder(collector):
-    mock_result = MagicMock()
-    mock_result.data = [MagicMock()]
-    collector.client.embeddings.create.return_value = mock_result
+def test_running_returns_list(collector):
+    m = MagicMock()
+    m.model      = "llama3.2:latest"
+    m.size_vram  = 3_500_000_000
+    m.expires_at = "2024-01-01T00:05:00"
+    collector._client.ps.return_value.models = [m]
 
-    collector.get_embeddings("some text")
+    result = collector.running()
+    assert isinstance(result, list)
+    assert result[0]["model"] == "llama3.2:latest"
 
-    collector.client.embeddings.create.assert_called_once_with(
-        model = "nomic-embed-text",
-        input = "some text",
+
+# ---------------------------------------------------------------------------
+# show
+# ---------------------------------------------------------------------------
+
+def test_show_returns_dict(collector):
+    resp = MagicMock()
+    resp.modelfile  = "FROM llama3.2"
+    resp.parameters = "temperature 0.7"
+    resp.template   = "{{ .Prompt }}"
+    resp.details    = MagicMock()
+    collector._client.show.return_value = resp
+
+    result = collector.show("llama3.2")
+    assert result["modelfile"] == "FROM llama3.2"
+    collector._client.show.assert_called_once_with("llama3.2")
+
+
+def test_show_uses_default_model(collector):
+    collector._client.show.return_value = MagicMock()
+    collector.show()
+    collector._client.show.assert_called_once_with("llama3.2")
+
+
+# ---------------------------------------------------------------------------
+# embed
+# ---------------------------------------------------------------------------
+
+def test_embed_returns_embeddings(collector):
+    collector._client.embed.return_value.embeddings = [[0.1, 0.2, 0.3]]
+    result = collector.embed("hello world")
+    assert result == [[0.1, 0.2, 0.3]]
+    collector._client.embed.assert_called_once_with(
+        model    = "nomic-embed-text",
+        input    = "hello world",
+        truncate = True,
     )
 
 
-def test_get_embeddings_uses_override_embedder(collector):
-    mock_result = MagicMock()
-    mock_result.data = [MagicMock()]
-    collector.client.embeddings.create.return_value = mock_result
-
-    collector.get_embeddings(["a", "b"], embedder="mxbai-embed-large")
-
-    collector.client.embeddings.create.assert_called_once_with(
-        model = "mxbai-embed-large",
-        input = ["a", "b"],
+def test_embed_uses_override_model(collector):
+    collector._client.embed.return_value.embeddings = [[0.5]]
+    collector.embed(["a", "b"], model="mxbai-embed-large")
+    collector._client.embed.assert_called_once_with(
+        model    = "mxbai-embed-large",
+        input    = ["a", "b"],
+        truncate = True,
     )
 
 
-def test_get_embeddings_return_full_object(collector):
-    mock_result = MagicMock()
-    collector.client.embeddings.create.return_value = mock_result
-
-    result = collector.get_embeddings("text", return_full_object=True)
-    assert result is mock_result
-
-
-def test_get_embeddings_return_data_by_default(collector):
-    mock_result = MagicMock()
-    mock_result.data = ["vec1"]
-    collector.client.embeddings.create.return_value = mock_result
-
-    result = collector.get_embeddings("text")
-    assert result == ["vec1"]
-
-
 # ---------------------------------------------------------------------------
-# get_answer_given_query
+# ask
 # ---------------------------------------------------------------------------
 
-def test_get_answer_given_query_returns_string(collector):
-    mock_response = MagicMock()
-    mock_response.choices[0].message.content = "42 is the answer."
-    collector.client.chat.completions.create.return_value = mock_response
-
-    result = collector.get_answer_given_query("What is the answer?")
-    assert result == "42 is the answer."
+def test_ask_returns_string(collector):
+    collector._client.chat.return_value = _make_chat_response("42 is the answer")
+    result = collector.ask("What is the answer?")
+    assert result == "42 is the answer"
 
 
-def test_get_answer_given_query_uses_system_content(collector):
-    mock_response = MagicMock()
-    mock_response.choices[0].message.content = "ok"
-    collector.client.chat.completions.create.return_value = mock_response
-
+def test_ask_sends_system_and_user_messages(collector):
+    collector._client.chat.return_value = _make_chat_response()
     collector.content = "You are a pirate."
-    collector.get_answer_given_query("Hello")
+    collector.ask("Hello")
 
-    _, kwargs = collector.client.chat.completions.create.call_args
-    assert kwargs["messages"][0] == {"role": "system", "content": "You are a pirate."}
+    _, kwargs = collector._client.chat.call_args
+    msgs = kwargs["messages"]
+    assert msgs[0] == {"role": "system", "content": "You are a pirate."}
+    assert msgs[1]["role"] == "user"
 
 
-def test_get_answer_given_query_uses_override_model(collector):
-    mock_response = MagicMock()
-    mock_response.choices[0].message.content = "ok"
-    collector.client.chat.completions.create.return_value = mock_response
-
-    collector.get_answer_given_query("Hi", model="mistral")
-
-    _, kwargs = collector.client.chat.completions.create.call_args
+def test_ask_uses_override_model(collector):
+    collector._client.chat.return_value = _make_chat_response()
+    collector.ask("Hi", model="mistral")
+    _, kwargs = collector._client.chat.call_args
     assert kwargs["model"] == "mistral"
 
 
+def test_ask_passes_think_param(collector):
+    collector._client.chat.return_value = _make_chat_response()
+    collector.ask("Reason about this", think="high")
+    _, kwargs = collector._client.chat.call_args
+    assert kwargs["think"] == "high"
+
+
+def test_ask_timer_prints(collector, capsys):
+    collector._client.chat.return_value = _make_chat_response(
+        total_duration=2_000_000_000, eval_count=25
+    )
+    collector.ask("Hi", timer=True)
+    out = capsys.readouterr().out
+    assert "2.0s" in out
+    assert "25" in out
+
+
 # ---------------------------------------------------------------------------
-# chat  (multi-turn / agentic)
+# chat
 # ---------------------------------------------------------------------------
 
-def test_chat_returns_string_when_no_tools(collector):
-    mock_response = MagicMock()
-    mock_response.choices[0].message.content = "Hello there!"
-    mock_response.choices[0].finish_reason = "stop"
-    collector.client.chat.completions.create.return_value = mock_response
-
-    messages = [
-        {"role": "system", "content": "You are helpful."},
-        {"role": "user",   "content": "Hi"},
-    ]
-    result = collector.chat(messages)
-    assert result == "Hello there!"
+def test_chat_returns_string(collector):
+    collector._client.chat.return_value = _make_chat_response("Hello!")
+    msgs = [{"role": "user", "content": "Hi"}]
+    assert collector.chat(msgs) == "Hello!"
 
 
-def test_chat_passes_full_message_history(collector):
-    mock_response = MagicMock()
-    mock_response.choices[0].message.content = "done"
-    mock_response.choices[0].finish_reason = "stop"
-    collector.client.chat.completions.create.return_value = mock_response
-
-    messages = [
+def test_chat_passes_full_history(collector):
+    collector._client.chat.return_value = _make_chat_response()
+    msgs = [
         {"role": "user",      "content": "First"},
         {"role": "assistant", "content": "Second"},
         {"role": "user",      "content": "Third"},
     ]
-    collector.chat(messages)
-
-    _, kwargs = collector.client.chat.completions.create.call_args
-    assert kwargs["messages"] == messages
-
-
-def test_chat_with_tools_returns_message_on_tool_call(collector):
-    mock_message = MagicMock()
-    mock_response = MagicMock()
-    mock_response.choices[0].message = mock_message
-    mock_response.choices[0].finish_reason = "tool_calls"
-    collector.client.chat.completions.create.return_value = mock_response
-
-    tools = [{"type": "function", "function": {"name": "search", "parameters": {}}}]
-    result = collector.chat([{"role": "user", "content": "Search X"}], tools=tools)
-    assert result is mock_message
+    collector.chat(msgs)
+    _, kwargs = collector._client.chat.call_args
+    assert kwargs["messages"] == msgs
 
 
-def test_chat_stream_returns_generator(collector):
-    chunk1, chunk2 = MagicMock(), MagicMock()
-    chunk1.choices[0].delta.content = "Hello"
-    chunk2.choices[0].delta.content = " world"
-    collector.client.chat.completions.create.return_value = iter([chunk1, chunk2])
+def test_chat_returns_message_on_tool_call(collector):
+    tool_call   = _make_tool_call("add", {"a": 1, "b": 2})
+    response    = _make_chat_response(tool_calls=[tool_call])
+    collector._client.chat.return_value = response
 
-    gen = collector.chat([{"role": "user", "content": "Hi"}], stream=True)
-    tokens = list(gen)
-    assert tokens == ["Hello", " world"]
+    tools  = [MagicMock()]
+    result = collector.chat([{"role": "user", "content": "1+2"}], tools=tools)
+    assert result is response.message
 
 
-# ---------------------------------------------------------------------------
-# get_structured_answer
-# ---------------------------------------------------------------------------
-
-def test_get_structured_answer_passes_schema(collector):
-    mock_response = MagicMock()
-    mock_response.choices[0].message.content = '{"name": "Alice"}'
-    collector.client.chat.completions.create.return_value = mock_response
-
+def test_chat_passes_format(collector):
+    collector._client.chat.return_value = _make_chat_response('{"name":"Alice"}')
     schema = {"type": "object", "properties": {"name": {"type": "string"}}}
-    result = collector.get_structured_answer("Who?", schema=schema)
+    collector.chat([{"role": "user", "content": "Who?"}], format=schema)
+    _, kwargs = collector._client.chat.call_args
+    assert kwargs["format"] == schema
 
+
+# ---------------------------------------------------------------------------
+# stream_chat
+# ---------------------------------------------------------------------------
+
+def test_stream_chat_yields_chunks(collector):
+    def _chunks():
+        for text in ["Hello", " ", "world"]:
+            c = MagicMock()
+            c.message.content = text
+            yield c
+
+    collector._client.chat.return_value = _chunks()
+    tokens = list(collector.stream_chat([{"role": "user", "content": "Hi"}]))
+    assert tokens == ["Hello", " ", "world"]
+
+
+def test_stream_chat_skips_empty_chunks(collector):
+    def _chunks():
+        for text in ["", "Hi", "", "!"]:
+            c = MagicMock()
+            c.message.content = text
+            yield c
+
+    collector._client.chat.return_value = _chunks()
+    tokens = list(collector.stream_chat([{"role": "user", "content": "Hi"}]))
+    assert tokens == ["Hi", "!"]
+
+
+# ---------------------------------------------------------------------------
+# run_with_tools
+# ---------------------------------------------------------------------------
+
+def test_run_with_tools_no_tool_calls(collector):
+    collector._client.chat.return_value = _make_chat_response("Final answer")
+
+    def add(a: int, b: int) -> int:
+        """Add two numbers"""
+        return a + b
+
+    result = collector.run_with_tools("What is 2+2?", tools=[add])
+    assert result == "Final answer"
+
+
+def test_run_with_tools_dispatches_tool_and_continues(collector):
+    tool_call     = _make_tool_call("add", {"a": 3, "b": 4})
+    first_resp    = _make_chat_response(tool_calls=[tool_call])
+    second_resp   = _make_chat_response("The answer is 7")
+    collector._client.chat.side_effect = [first_resp, second_resp]
+
+    def add(a: int, b: int) -> int:
+        """Add two integers"""
+        return a + b
+
+    result = collector.run_with_tools("Add 3 and 4", tools=[add])
+    assert result == "The answer is 7"
+    assert collector._client.chat.call_count == 2
+
+
+def test_run_with_tools_raises_on_unknown_tool(collector):
+    tool_call  = _make_tool_call("nonexistent", {})
+    response   = _make_chat_response(tool_calls=[tool_call])
+    collector._client.chat.return_value = response
+
+    def real_tool():
+        """A tool"""
+        return "ok"
+
+    with pytest.raises(ValueError, match="unknown tool"):
+        collector.run_with_tools("Do something", tools=[real_tool])
+
+
+def test_run_with_tools_raises_after_max_turns(collector):
+    def _infinite_tool_call(**_kwargs):
+        tc       = _make_tool_call("add", {"a": 1, "b": 1})
+        response = _make_chat_response(tool_calls=[tc])
+        return response
+
+    collector._client.chat.side_effect = _infinite_tool_call
+
+    def add(a: int, b: int) -> int:
+        """Add numbers"""
+        return a + b
+
+    with pytest.raises(RuntimeError, match="max_turns"):
+        collector.run_with_tools("Loop forever", tools=[add], max_turns=3)
+
+
+# ---------------------------------------------------------------------------
+# ask_structured
+# ---------------------------------------------------------------------------
+
+def test_ask_structured_with_dict_schema(collector):
+    collector._client.chat.return_value = _make_chat_response('{"name": "Alice"}')
+    schema = {"type": "object", "properties": {"name": {"type": "string"}}}
+    result = collector.ask_structured("Who?", schema)
     assert result == '{"name": "Alice"}'
-    _, kwargs = collector.client.chat.completions.create.call_args
-    assert kwargs["response_format"]["type"] == "json_schema"
-    assert kwargs["response_format"]["json_schema"]["schema"] == schema
+    _, kwargs = collector._client.chat.call_args
+    assert kwargs["format"] == schema
+
+
+def test_ask_structured_with_pydantic_schema(collector):
+    collector._client.chat.return_value = _make_chat_response('{"age": 30}')
+
+    class FakeModel:
+        @staticmethod
+        def model_json_schema():
+            return {"type": "object", "properties": {"age": {"type": "integer"}}}
+
+    result = collector.ask_structured("How old?", FakeModel)
+    assert result == '{"age": 30}'
+    _, kwargs = collector._client.chat.call_args
+    assert kwargs["format"]["properties"]["age"]["type"] == "integer"
+
+
+def test_ask_structured_uses_temperature_zero(collector):
+    collector._client.chat.return_value = _make_chat_response("{}")
+    collector.ask_structured("test", {})
+    _, kwargs = collector._client.chat.call_args
+    assert kwargs["options"] == {"temperature": 0}
 
 
 # ---------------------------------------------------------------------------
-# get_answer_with_image
+# ask_with_image
 # ---------------------------------------------------------------------------
 
-def test_get_answer_with_image_encodes_and_sends(collector, tmp_path):
-    img = tmp_path / "test.jpg"
-    img.write_bytes(b"\xff\xd8\xff")  # minimal JPEG header bytes
+def test_ask_with_image_sends_encoded_image(collector, tmp_path):
+    img = tmp_path / "photo.jpg"
+    img.write_bytes(b"\xff\xd8\xff")
 
-    mock_response = MagicMock()
-    mock_response.choices[0].message.content = "A dog."
-    collector.client.chat.completions.create.return_value = mock_response
+    collector._client.chat.return_value = _make_chat_response("A sunset")
+    result = collector.ask_with_image("What is this?", str(img))
+    assert result == "A sunset"
 
-    result = collector.get_answer_with_image("What is this?", str(img))
-    assert result == "A dog."
-
-    _, kwargs = collector.client.chat.completions.create.call_args
+    _, kwargs = collector._client.chat.call_args
     user_msg = kwargs["messages"][1]
     assert user_msg["role"] == "user"
-    assert any(p["type"] == "image_url" for p in user_msg["content"])
+    assert "images" in user_msg
+    assert len(user_msg["images"]) == 1
 
 
-def test_get_answer_with_image_raises_on_missing_file(collector):
+def test_ask_with_image_raises_on_missing_file(collector):
     with pytest.raises(OSError):
-        collector.get_answer_with_image("What?", "/nonexistent/image.jpg")
+        collector.ask_with_image("What?", "/no/such/file.jpg")
 
 
 # ---------------------------------------------------------------------------
 # encode_image
 # ---------------------------------------------------------------------------
 
-def test_encode_image_returns_base64_string(tmp_path):
+def test_encode_image_returns_base64(tmp_path):
     from pyutils.ollama.ollama_collector import OllamaCollector
     img = tmp_path / "img.png"
-    img.write_bytes(b"\x89PNG\r\n")
+    img.write_bytes(b"\x89PNG\r\n\x1a\n")
     result = OllamaCollector.encode_image(str(img))
     assert isinstance(result, str)
     assert len(result) > 0
@@ -341,4 +446,134 @@ def test_encode_image_returns_base64_string(tmp_path):
 def test_encode_image_raises_on_missing_file():
     from pyutils.ollama.ollama_collector import OllamaCollector
     with pytest.raises(OSError):
-        OllamaCollector.encode_image("/no/such/file.png")
+        OllamaCollector.encode_image("/nonexistent/image.png")
+
+
+# ---------------------------------------------------------------------------
+# Async — async_ask
+# ---------------------------------------------------------------------------
+
+def test_async_ask_returns_string(collector):
+    async def _run():
+        collector._async_client.chat = AsyncMock(
+            return_value=_make_chat_response("async answer")
+        )
+        return await collector.async_ask("Hello")
+
+    result = asyncio.run(_run())
+    assert result == "async answer"
+
+
+def test_async_ask_passes_think_param(collector):
+    async def _run():
+        collector._async_client.chat = AsyncMock(
+            return_value=_make_chat_response("ok")
+        )
+        await collector.async_ask("Reason", think=True)
+        _, kwargs = collector._async_client.chat.call_args
+        return kwargs
+
+    kwargs = asyncio.run(_run())
+    assert kwargs["think"] is True
+
+
+# ---------------------------------------------------------------------------
+# Async — async_chat
+# ---------------------------------------------------------------------------
+
+def test_async_chat_returns_string(collector):
+    async def _run():
+        collector._async_client.chat = AsyncMock(
+            return_value=_make_chat_response("done")
+        )
+        return await collector.async_chat([{"role": "user", "content": "hi"}])
+
+    assert asyncio.run(_run()) == "done"
+
+
+def test_async_chat_returns_message_on_tool_call(collector):
+    async def _run():
+        tool_call = _make_tool_call("search", {"q": "test"})
+        response  = _make_chat_response(tool_calls=[tool_call])
+        collector._async_client.chat = AsyncMock(return_value=response)
+        tools  = [MagicMock()]
+        return await collector.async_chat(
+            [{"role": "user", "content": "search"}],
+            tools=tools,
+        )
+
+    result = asyncio.run(_run())
+    assert hasattr(result, "tool_calls")
+
+
+# ---------------------------------------------------------------------------
+# Async — async_stream_chat
+# ---------------------------------------------------------------------------
+
+def test_async_stream_chat_yields_chunks(collector):
+    async def fake_stream():
+        for text in ["chunk1", "chunk2", "chunk3"]:
+            c = MagicMock()
+            c.message.content = text
+            yield c
+
+    async def _run():
+        collector._async_client.chat = AsyncMock(return_value=fake_stream())
+        tokens = []
+        async for token in collector.async_stream_chat([{"role": "user", "content": "hi"}]):
+            tokens.append(token)
+        return tokens
+
+    assert asyncio.run(_run()) == ["chunk1", "chunk2", "chunk3"]
+
+
+# ---------------------------------------------------------------------------
+# Async — async_run_with_tools
+# ---------------------------------------------------------------------------
+
+def test_async_run_with_tools_dispatches_and_returns(collector):
+    async def _run():
+        tool_call   = _make_tool_call("multiply", {"a": 3, "b": 5})
+        first_resp  = _make_chat_response(tool_calls=[tool_call])
+        second_resp = _make_chat_response("The result is 15")
+        collector._async_client.chat = AsyncMock(side_effect=[first_resp, second_resp])
+
+        def multiply(a: int, b: int) -> int:
+            """Multiply two integers"""
+            return a * b
+
+        return await collector.async_run_with_tools("3 times 5", tools=[multiply])
+
+    assert asyncio.run(_run()) == "The result is 15"
+
+
+def test_async_run_with_tools_supports_async_tools(collector):
+    async def _run():
+        tool_call   = _make_tool_call("fetch", {"url": "http://example.com"})
+        first_resp  = _make_chat_response(tool_calls=[tool_call])
+        second_resp = _make_chat_response("Got the page")
+        collector._async_client.chat = AsyncMock(side_effect=[first_resp, second_resp])
+
+        async def fetch(url: str) -> str:
+            """Fetch a URL"""
+            return f"content from {url}"
+
+        return await collector.async_run_with_tools("Fetch example", tools=[fetch])
+
+    assert asyncio.run(_run()) == "Got the page"
+
+
+def test_async_run_with_tools_raises_after_max_turns(collector):
+    async def _run():
+        tc       = _make_tool_call("loop", {})
+        response = _make_chat_response(tool_calls=[tc])
+        collector._async_client.chat = AsyncMock(return_value=response)
+
+        def loop() -> str:
+            """Loop forever"""
+            return "again"
+
+        await collector.async_run_with_tools("go", tools=[loop], max_turns=2)
+
+    with pytest.raises(RuntimeError, match="max_turns"):
+        asyncio.run(_run())
