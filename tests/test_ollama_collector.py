@@ -988,3 +988,103 @@ def test_async_chat_passes_options(collector):
         return kwargs
     kwargs = asyncio.run(_run())
     assert kwargs["options"] == {"num_ctx": 8192}
+
+
+# ---------------------------------------------------------------------------
+# Task 5 — run_with_tools: error handling, validation, HITL, hooks
+# ---------------------------------------------------------------------------
+
+def test_run_with_tools_tool_exception_returns_error_message(collector):
+    def bad_tool() -> str:
+        """A tool that raises"""
+        raise RuntimeError("kaboom")
+    tool_call   = _make_tool_call("bad_tool", {})
+    first_resp  = _make_chat_response(tool_calls=[tool_call])
+    second_resp = _make_chat_response("Handled the error")
+    collector._client.chat.side_effect = [first_resp, second_resp]
+    result = collector.run_with_tools("test", tools=[bad_tool])
+    assert result == "Handled the error"
+    second_msgs = collector._client.chat.call_args_list[1][1]["messages"]
+    tool_msg = next(m for m in second_msgs if isinstance(m, dict) and m.get("role") == "tool")
+    assert "Error: kaboom" in tool_msg["content"]
+
+
+def test_run_with_tools_arg_validation_returns_error(collector):
+    def typed_tool(x: int) -> int:
+        """A typed tool"""
+        return x * 2
+    tool_call   = _make_tool_call("typed_tool", {"wrong_param": 1})
+    first_resp  = _make_chat_response(tool_calls=[tool_call])
+    second_resp = _make_chat_response("Fixed")
+    collector._client.chat.side_effect = [first_resp, second_resp]
+    collector.run_with_tools("test", tools=[typed_tool])
+    second_msgs = collector._client.chat.call_args_list[1][1]["messages"]
+    tool_msg = next(m for m in second_msgs if isinstance(m, dict) and m.get("role") == "tool")
+    assert "Error: invalid arguments" in tool_msg["content"]
+
+
+def test_run_with_tools_hitl_gate_declines(collector):
+    def my_tool(x: int) -> int:
+        """My tool"""
+        return x
+    tool_call   = _make_tool_call("my_tool", {"x": 1})
+    first_resp  = _make_chat_response(tool_calls=[tool_call])
+    second_resp = _make_chat_response("Declined")
+    collector._client.chat.side_effect = [first_resp, second_resp]
+    gate = MagicMock(return_value=False)
+    collector.run_with_tools("test", tools=[my_tool], confirm_tool_call=gate)
+    gate.assert_called_once_with("my_tool", {"x": 1})
+    second_msgs = collector._client.chat.call_args_list[1][1]["messages"]
+    tool_msg = next(m for m in second_msgs if isinstance(m, dict) and m.get("role") == "tool")
+    assert tool_msg["content"] == "Tool execution declined."
+
+
+def test_run_with_tools_hitl_gate_allows(collector):
+    def my_tool(x: int) -> int:
+        """My tool"""
+        return x * 3
+    tool_call   = _make_tool_call("my_tool", {"x": 4})
+    first_resp  = _make_chat_response(tool_calls=[tool_call])
+    second_resp = _make_chat_response("Got 12")
+    collector._client.chat.side_effect = [first_resp, second_resp]
+    gate = MagicMock(return_value=True)
+    result = collector.run_with_tools("test", tools=[my_tool], confirm_tool_call=gate)
+    assert result == "Got 12"
+
+
+def test_run_with_tools_on_tool_call_hook_fires(collector):
+    def my_tool(x: int) -> int:
+        """My tool"""
+        return x * 2
+    tool_call   = _make_tool_call("my_tool", {"x": 5})
+    first_resp  = _make_chat_response(tool_calls=[tool_call])
+    second_resp = _make_chat_response("Done")
+    collector._client.chat.side_effect = [first_resp, second_resp]
+    hook = MagicMock()
+    collector.on_tool_call = hook
+    collector.run_with_tools("test", tools=[my_tool])
+    hook.assert_called_once_with("my_tool", {"x": 5})
+
+
+def test_run_with_tools_on_tool_result_hook_fires(collector):
+    def my_tool(x: int) -> int:
+        """My tool"""
+        return x * 2
+    tool_call   = _make_tool_call("my_tool", {"x": 5})
+    first_resp  = _make_chat_response(tool_calls=[tool_call])
+    second_resp = _make_chat_response("Done")
+    collector._client.chat.side_effect = [first_resp, second_resp]
+    hook = MagicMock()
+    collector.on_tool_result = hook
+    collector.run_with_tools("test", tools=[my_tool])
+    hook.assert_called_once_with("my_tool", 10)
+
+
+def test_run_with_tools_passes_options(collector):
+    def my_tool(x: int) -> int:
+        """My tool"""
+        return x
+    collector._client.chat.return_value = _make_chat_response("done")
+    collector.run_with_tools("test", tools=[my_tool], options={"temperature": 0})
+    _, kwargs = collector._client.chat.call_args
+    assert kwargs["options"] == {"temperature": 0}
