@@ -22,13 +22,13 @@ def csv_analyzer(path_to_csv:str, single_column:str='', separator:str=','):
 	'''
 
 	try:
-		data = pd.read_csv('data.csv', sep=separator)
+		data = pd.read_csv(path_to_csv, sep=separator)
 
 		if single_column != '':
 			mean = data[single_column].mean()
 			print(f"Mean of {single_column} is: {mean}")
 		else:
-			data.describe()
+			print(data.describe())
 
-	except Exception as ex:
+	except (FileNotFoundError, pd.errors.ParserError) as ex:
 		print(f'csv_analyzer saw error {ex}')
