@@ -221,6 +221,34 @@ class OllamaCollector:
         except Exception:
             return False
 
+    def _chat_with_retry(self, **kwargs: Any) -> Any:
+        """Wrap self._client.chat with exponential backoff on transient errors."""
+        delay = self.retry_base_delay
+        last_exc: Exception = RuntimeError("no attempts made")
+        for attempt in range(self.max_retries + 1):
+            try:
+                return self._client.chat(**kwargs)
+            except (ConnectionError, TimeoutError, OSError) as exc:
+                last_exc = exc
+                if attempt < self.max_retries:
+                    _time.sleep(min(delay, self.retry_max_delay))
+                    delay *= 2
+        raise last_exc
+
+    async def _async_chat_with_retry(self, **kwargs: Any) -> Any:
+        """Async version of _chat_with_retry with exponential backoff."""
+        delay = self.retry_base_delay
+        last_exc: Exception = RuntimeError("no attempts made")
+        for attempt in range(self.max_retries + 1):
+            try:
+                return await self._async_client.chat(**kwargs)
+            except (ConnectionError, TimeoutError, OSError) as exc:
+                last_exc = exc
+                if attempt < self.max_retries:
+                    await asyncio.sleep(min(delay, self.retry_max_delay))
+                    delay *= 2
+        raise last_exc
+
     # ------------------------------------------------------------------
     # Model management
     # ------------------------------------------------------------------

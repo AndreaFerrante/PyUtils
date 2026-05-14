@@ -831,6 +831,48 @@ def test_init_no_semaphore_when_concurrency_zero():
 
 
 # ---------------------------------------------------------------------------
+# _chat_with_retry / _async_chat_with_retry
+# ---------------------------------------------------------------------------
+
+def test_chat_with_retry_succeeds_after_transient_failure(collector):
+    collector._client.chat.side_effect = [
+        ConnectionError("refused"),
+        _make_chat_response("ok"),
+    ]
+    with patch("pyutils.ollama.ollama_collector._time.sleep"):
+        result = collector._chat_with_retry(model="llama3.2", messages=[])
+    assert result.message.content == "ok"
+    assert collector._client.chat.call_count == 2
+
+
+def test_chat_with_retry_reraises_after_max_retries(collector):
+    collector._client.chat.side_effect = ConnectionError("refused")
+    collector.max_retries = 2
+    with patch("pyutils.ollama.ollama_collector._time.sleep"):
+        with pytest.raises(ConnectionError):
+            collector._chat_with_retry(model="llama3.2", messages=[])
+    assert collector._client.chat.call_count == 3  # initial + 2 retries
+
+
+def test_chat_with_retry_does_not_retry_non_transient(collector):
+    collector._client.chat.side_effect = ValueError("bad model")
+    with pytest.raises(ValueError):
+        collector._chat_with_retry(model="bad", messages=[])
+    assert collector._client.chat.call_count == 1
+
+
+def test_async_chat_with_retry_succeeds_after_transient_failure(collector):
+    async def _run():
+        collector._async_client.chat = AsyncMock(
+            side_effect=[ConnectionError("refused"), _make_chat_response("ok")]
+        )
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            return await collector._async_chat_with_retry(model="llama3.2", messages=[])
+    result = asyncio.run(_run())
+    assert result.message.content == "ok"
+
+
+# ---------------------------------------------------------------------------
 # __init__.py exports
 # ---------------------------------------------------------------------------
 
