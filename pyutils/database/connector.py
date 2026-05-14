@@ -1,7 +1,11 @@
 
-def manage_database(source_db_file:str, backup_db_file:str):
+def manage_database(source_db_file: str, backup_db_file: str) -> None:
 
     import shutil
+    import os
+    if not os.path.exists(source_db_file):
+        print(f"Source database not found: {source_db_file}")
+        return
 
     """
     Manage a database by providing options to backup and restore.

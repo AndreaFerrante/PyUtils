@@ -1,4 +1,4 @@
-def generate_password(length:str=12) -> str :
+def generate_password(length: int = 12) -> str:
 
     import random, string
 

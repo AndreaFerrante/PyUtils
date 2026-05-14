@@ -1,17 +1,18 @@
 import time
 import datetime
 from threading import Thread
+from typing import Callable
 
 
 class FunctionScheduler:
 
     def __init__(self):
         self.scheduled_functions = list()
-        
-    def schedule(self, function, target_time):
+
+    def schedule(self, function: Callable, target_time: datetime.datetime) -> None:
         self.scheduled_functions.append((function, target_time))
-        
-    def _run_function_at_time(self, function, target_time):
+
+    def _run_function_at_time(self, function: Callable, target_time: datetime.datetime) -> None:
         while True:
             current_time = datetime.datetime.now()
             if current_time >= target_time:

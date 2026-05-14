@@ -1,10 +1,13 @@
 
-def send_magic_packet(mac_address):
+def send_magic_packet(mac_address: str) -> None:
 
     import socket
 
     try:
-        mac_address = mac_address.replace(':', '')
+        import re
+        if not re.match(r'^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$', mac_address):
+            raise ValueError(f"Invalid MAC address format: {mac_address}")
+        mac_address = mac_address.replace(':', '').replace('-', '')
         mac_address_bytes = bytes.fromhex(mac_address)
         print(f"MAC Address Bytes: {mac_address_bytes}")
 

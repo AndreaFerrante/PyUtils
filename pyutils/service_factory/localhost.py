@@ -74,7 +74,7 @@ def get_file_content(path_to_read:str=None, file_name:str=None):
 
 	if file_name and path_to_read:
 
-		with open(path_to_read + '/' + file_name, 'r') as f:
+		with open(os.path.join(path_to_read, file_name), 'r') as f:
 			all_lines = f.read().replace('\n', ' ')
 
 		return all_lines
@@ -105,7 +105,7 @@ def get_files_timestamps_in_path(path_to_scan:str=None) -> list:
 		files_path        = os.listdir(path_to_scan)
 
 		for file in files_path:
-			files_timestamps.append( (file, time.ctime(os.path.getctime(path_to_scan + '/' + file) ) ) )
+			files_timestamps.append((file, time.ctime(os.path.getctime(os.path.join(path_to_scan, file)))))
 
 		return sorted(files_timestamps, key=lambda x: x[1], reverse=True)
 
@@ -177,7 +177,7 @@ def get_csv_files_in_path_stacked(path_to_stack:str=None, file_extensions:str='c
 
 				if print_files:
 					print(f'Reading file named {file} . . .')
-				files_stacked.append( pd.read_csv( path_to_stack + '/' + file, sep=sep, encoding=encoding ) )
+				files_stacked.append(pd.read_csv(os.path.join(path_to_stack, file), sep=sep, encoding=encoding))
 
 		return pd.concat(files_stacked)
 
@@ -185,7 +185,7 @@ def get_csv_files_in_path_stacked(path_to_stack:str=None, file_extensions:str='c
 		warnings.warn("Attention: path to stack must be passed", RuntimeWarning)
 
 
-def get_xlsx_files_in_path_stacked(path_to_stack:str=None, file_extensions:list=['xls, xlsx', 'xlsm'], print_files:bool=True):
+def get_xlsx_files_in_path_stacked(path_to_stack: str = None, file_extensions: list = None, print_files: bool = True):
 
 	'''
 	This function returns all Excel files (with a given extension and folder path) stacked one over the other !
@@ -198,6 +198,9 @@ def get_xlsx_files_in_path_stacked(path_to_stack:str=None, file_extensions:list=
 		files_stacked: pandas dataframe format, this is a dataframe with all files stacked on each other BY ROWS
 	'''
 
+	if file_extensions is None:
+		file_extensions = ['xls', 'xlsx', 'xlsm']
+
 	if path_to_stack:
 
 		files_to_stack = os.listdir(path_to_stack)
@@ -209,7 +212,7 @@ def get_xlsx_files_in_path_stacked(path_to_stack:str=None, file_extensions:list=
 
 				if print_files:
 					print(f'Reading file named {file} . . .')
-				files_stacked.append( pd.read_excel( path_to_stack + '/' + file) )
+				files_stacked.append(pd.read_excel(os.path.join(path_to_stack, file)))
 
 		return pd.concat(files_stacked)
 
