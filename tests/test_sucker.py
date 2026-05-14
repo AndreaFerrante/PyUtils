@@ -1,13 +1,5 @@
-import os
 import pytest
-import importlib.util
-
-# Import directly to avoid broken web/__init__.py (fixed in Task 6)
-_path = os.path.join(os.path.dirname(__file__), '..', 'pyutils', 'web', 'sucker.py')
-_spec = importlib.util.spec_from_file_location("sucker", os.path.abspath(_path))
-_mod = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_mod)
-email_sender = _mod.email_sender
+from pyutils.web.sucker import email_sender
 
 
 def test_email_sender_none_param_returns_early(capsys):

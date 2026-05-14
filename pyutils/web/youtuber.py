@@ -17,10 +17,16 @@ try:
         VideoUnavailable,
         YouTubeRequestFailed
     )
+    _YOUTUBE_API_AVAILABLE = True
 except ImportError:
-    print("Error: youtube-transcript-api is not installed.")
-    print("Install it with: pip install youtube-transcript-api")
-    sys.exit(1)
+    YouTubeTranscriptApi = None
+    TextFormatter = None
+    JSONFormatter = None
+    TranscriptsDisabled = Exception
+    NoTranscriptFound = Exception
+    VideoUnavailable = Exception
+    YouTubeRequestFailed = Exception
+    _YOUTUBE_API_AVAILABLE = False
 
 
 logging.basicConfig(
@@ -37,8 +43,8 @@ logger = logging.getLogger(__name__)
 class YouTubeTranscriptExtractor:
     
     def __init__(self):
-        self.text_formatter = TextFormatter()
-        self.json_formatter = JSONFormatter()
+        self.text_formatter = TextFormatter() if _YOUTUBE_API_AVAILABLE else None
+        self.json_formatter = JSONFormatter() if _YOUTUBE_API_AVAILABLE else None
     
     def extract_video_id(self, url: str) -> Optional[str]:
         """
@@ -195,9 +201,13 @@ class YouTubeTranscriptExtractor:
             Formatted transcript string
         """
         if format_type == 'text':
-            return self.text_formatter.format_transcript(transcript_data)
+            if self.text_formatter is not None:
+                return self.text_formatter.format_transcript(transcript_data)
+            return ' '.join(seg['text'] for seg in transcript_data)
         elif format_type == 'json':
-            return self.json_formatter.format_transcript(transcript_data)
+            if self.json_formatter is not None:
+                return self.json_formatter.format_transcript(transcript_data)
+            return json.dumps(transcript_data, indent=2)
         elif format_type == 'srt':
             return self._format_as_srt(transcript_data)
         else:
@@ -271,7 +281,11 @@ class YouTubeTranscriptExtractor:
 
 
 def main():
-    
+    if not _YOUTUBE_API_AVAILABLE:
+        print("Error: youtube-transcript-api is not installed.")
+        print("Install it with: pip install youtube-transcript-api")
+        sys.exit(1)
+
     parser = argparse.ArgumentParser(
         description='Extract transcripts from YouTube videos',
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -354,7 +368,7 @@ def main():
         extensions = {'text': '.txt', 'json': '.json', 'srt': '.srt'}
         output_path = f"{video_id}_transcript{extensions[args.format]}"
     
-    if extractor.save_transcript(formatted_transcript, output_path, video_id, args.format):
+    if extractor.save_transcript(formatted_transcript, output_path, args.format):
         print(f"Transcript successfully saved to: {output_path}")
     else:
         logger.error("Failed to save transcript")
