@@ -788,6 +788,49 @@ def test_chat_web_search_prepends_web_tools(collector):
 
 
 # ---------------------------------------------------------------------------
+# __init__ — new agentic params
+# ---------------------------------------------------------------------------
+
+def test_init_new_defaults():
+    with (
+        patch("pyutils.ollama.ollama_collector.Client"),
+        patch("pyutils.ollama.ollama_collector.AsyncClient"),
+    ):
+        from pyutils.ollama.ollama_collector import OllamaCollector
+        c = OllamaCollector()
+        assert c.max_retries            == 3
+        assert c.retry_base_delay       == 1.0
+        assert c.retry_max_delay        == 8.0
+        assert c.context_limit          == 4096
+        assert c.context_warn_threshold == 0.8
+        assert c.tool_concurrency       == 0
+        assert c.on_tool_call           is None
+        assert c.on_tool_result         is None
+        assert c.confirm_tool_call      is None
+
+
+def test_init_tool_semaphore_created_when_concurrency_set():
+    import asyncio
+    with (
+        patch("pyutils.ollama.ollama_collector.Client"),
+        patch("pyutils.ollama.ollama_collector.AsyncClient"),
+    ):
+        from pyutils.ollama.ollama_collector import OllamaCollector
+        c = OllamaCollector(tool_concurrency=3)
+        assert isinstance(c._tool_semaphore, asyncio.Semaphore)
+
+
+def test_init_no_semaphore_when_concurrency_zero():
+    with (
+        patch("pyutils.ollama.ollama_collector.Client"),
+        patch("pyutils.ollama.ollama_collector.AsyncClient"),
+    ):
+        from pyutils.ollama.ollama_collector import OllamaCollector
+        c = OllamaCollector(tool_concurrency=0)
+        assert c._tool_semaphore is None
+
+
+# ---------------------------------------------------------------------------
 # __init__.py exports
 # ---------------------------------------------------------------------------
 

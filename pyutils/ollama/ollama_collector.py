@@ -14,10 +14,13 @@ produces a final answer.
 import argparse
 import asyncio
 import base64
+import inspect
 import json
 import os
+import time as _time
 import urllib.error
 import urllib.request
+import warnings
 from typing import (
     Any,
     AsyncGenerator,
@@ -155,18 +158,38 @@ class OllamaCollector:
 
     def __init__(
         self,
-        host:     str   = DEFAULT_HOST,
-        model:    str   = "",
-        embedder: str   = "",
-        content:  str   = "",
-        timeout:  float = 125.0,
+        host:                   str   = DEFAULT_HOST,
+        model:                  str   = "",
+        embedder:               str   = "",
+        content:                str   = "",
+        timeout:                float = 125.0,
+        max_retries:            int   = 3,
+        retry_base_delay:       float = 1.0,
+        retry_max_delay:        float = 8.0,
+        context_limit:          int   = 4096,
+        context_warn_threshold: float = 0.8,
+        tool_concurrency:       int   = 0,
+        on_tool_call:           Optional[Callable[[str, dict], None]] = None,
+        on_tool_result:         Optional[Callable[[str, Any],  None]] = None,
+        confirm_tool_call:      Optional[Callable[[str, dict], bool]] = None,
     ) -> None:
-        self.host     = host
-        self.model    = model    or self.DEFAULT_MODEL
-        self.embedder = embedder or self.DEFAULT_EMBEDDER
-        self.content  = content  or self.DEFAULT_CONTENT
-        self.timeout  = timeout
-
+        self.host                   = host
+        self.model                  = model    or self.DEFAULT_MODEL
+        self.embedder               = embedder or self.DEFAULT_EMBEDDER
+        self.content                = content  or self.DEFAULT_CONTENT
+        self.timeout                = timeout
+        self.max_retries            = max_retries
+        self.retry_base_delay       = retry_base_delay
+        self.retry_max_delay        = retry_max_delay
+        self.context_limit          = context_limit
+        self.context_warn_threshold = context_warn_threshold
+        self.tool_concurrency       = tool_concurrency
+        self.on_tool_call           = on_tool_call
+        self.on_tool_result         = on_tool_result
+        self.confirm_tool_call      = confirm_tool_call
+        self._tool_semaphore: Optional[asyncio.Semaphore] = (
+            asyncio.Semaphore(tool_concurrency) if tool_concurrency > 0 else None
+        )
         self._client       = Client(host=self.host, timeout=self.timeout)
         self._async_client = AsyncClient(host=self.host, timeout=self.timeout)
 
