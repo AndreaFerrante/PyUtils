@@ -63,7 +63,7 @@ class OpenAICollector:
         if len(model):
             return model
 
-        return "gpt-4.1"
+        return "gpt-5-mini"
 
     @staticmethod
     def get_embedder(embedder: str) -> str:
