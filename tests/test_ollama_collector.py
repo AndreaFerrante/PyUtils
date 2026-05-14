@@ -915,3 +915,76 @@ def test_check_context_no_warn_when_prompt_eval_count_missing(collector):
         _warnings_module.simplefilter("always")
         collector._check_context(response)
     assert len(caught) == 0
+
+
+# ---------------------------------------------------------------------------
+# Task 4 — options passthrough
+# ---------------------------------------------------------------------------
+
+def test_ask_passes_options_to_sdk(collector):
+    collector._client.chat.return_value = _make_chat_response("ok")
+    collector.ask("hi", options={"temperature": 0.5, "num_ctx": 2048})
+    _, kwargs = collector._client.chat.call_args
+    assert kwargs["options"] == {"temperature": 0.5, "num_ctx": 2048}
+
+
+def test_ask_no_options_key_when_none(collector):
+    collector._client.chat.return_value = _make_chat_response("ok")
+    collector.ask("hi")
+    _, kwargs = collector._client.chat.call_args
+    assert "options" not in kwargs
+
+
+def test_chat_passes_options_to_sdk(collector):
+    collector._client.chat.return_value = _make_chat_response("ok")
+    collector.chat([{"role": "user", "content": "hi"}], options={"temperature": 0})
+    _, kwargs = collector._client.chat.call_args
+    assert kwargs["options"] == {"temperature": 0}
+
+
+def test_stream_chat_passes_options(collector):
+    def _chunks():
+        c = MagicMock()
+        c.message.content = "ok"
+        yield c
+    collector._client.chat.return_value = _chunks()
+    list(collector.stream_chat([{"role": "user", "content": "hi"}], options={"top_p": 0.9}))
+    _, kwargs = collector._client.chat.call_args
+    assert kwargs["options"] == {"top_p": 0.9}
+
+
+def test_ask_structured_caller_options_override_temperature(collector):
+    collector._client.chat.return_value = _make_chat_response("{}")
+    collector.ask_structured("q", {}, options={"temperature": 0.7})
+    _, kwargs = collector._client.chat.call_args
+    assert kwargs["options"]["temperature"] == 0.7
+
+
+def test_ask_structured_keeps_temperature_zero_when_no_override(collector):
+    collector._client.chat.return_value = _make_chat_response("{}")
+    collector.ask_structured("q", {})
+    _, kwargs = collector._client.chat.call_args
+    assert kwargs["options"]["temperature"] == 0
+
+
+def test_async_ask_passes_options(collector):
+    async def _run():
+        collector._async_client.chat = AsyncMock(return_value=_make_chat_response("ok"))
+        await collector.async_ask("hi", options={"temperature": 0.3})
+        _, kwargs = collector._async_client.chat.call_args
+        return kwargs
+    kwargs = asyncio.run(_run())
+    assert kwargs["options"] == {"temperature": 0.3}
+
+
+def test_async_chat_passes_options(collector):
+    async def _run():
+        collector._async_client.chat = AsyncMock(return_value=_make_chat_response("ok"))
+        await collector.async_chat(
+            [{"role": "user", "content": "hi"}],
+            options={"num_ctx": 8192},
+        )
+        _, kwargs = collector._async_client.chat.call_args
+        return kwargs
+    kwargs = asyncio.run(_run())
+    assert kwargs["options"] == {"num_ctx": 8192}

@@ -251,7 +251,8 @@ class OllamaCollector:
 
     def _check_context(self, response: Any) -> None:
         """Warn when the context window usage exceeds the configured threshold."""
-        used = getattr(response, "prompt_eval_count", None) or 0
+        raw  = getattr(response, "prompt_eval_count", None)
+        used = raw if isinstance(raw, int) else 0
         if used and used >= self.context_limit * self.context_warn_threshold:
             pct = used / self.context_limit
             warnings.warn(
@@ -352,6 +353,7 @@ class OllamaCollector:
         think:      Think = None,
         timer:      bool  = False,
         web_search: bool  = False,
+        options:    Optional[Dict[str, Any]] = None,
     ) -> str:
         """Single-turn query with system prompt. Returns assistant text.
 
@@ -362,10 +364,11 @@ class OllamaCollector:
         """
         if web_search:
             return self.run_with_tools(
-                query     = query,
-                tools     = self.WEB_TOOLS,
-                model     = model,
-                think     = think,
+                query   = query,
+                tools   = self.WEB_TOOLS,
+                model   = model,
+                think   = think,
+                options = options,
             )
 
         kwargs: Dict[str, Any] = {
@@ -375,11 +378,10 @@ class OllamaCollector:
                 {"role": "user",   "content": query},
             ],
         }
-        if think is not None:
-            kwargs["think"] = think
-
-        response = self._client.chat(**kwargs)
-
+        if think   is not None: kwargs["think"]   = think
+        if options is not None: kwargs["options"] = options
+        response = self._chat_with_retry(**kwargs)
+        self._check_context(response)
         if timer:
             secs = round(response.total_duration / 1e9, 3)
             print(f"Answer took: {secs}s  ({response.eval_count} tokens generated)")
@@ -398,6 +400,7 @@ class OllamaCollector:
         think:      Think = None,
         format:     Any   = None,
         web_search: bool  = False,
+        options:    Optional[Dict[str, Any]] = None,
     ) -> Union[str, "ollama.Message"]:
         """Multi-turn chat accepting full message history.
 
@@ -417,12 +420,12 @@ class OllamaCollector:
             "model":    model or self.model,
             "messages": messages,
         }
-        if effective_tools is not None: kwargs["tools"]  = effective_tools
-        if think           is not None: kwargs["think"]  = think
-        if format          is not None: kwargs["format"] = format
-
-        response = self._client.chat(**kwargs)
-
+        if effective_tools is not None: kwargs["tools"]   = effective_tools
+        if think           is not None: kwargs["think"]   = think
+        if format          is not None: kwargs["format"]  = format
+        if options         is not None: kwargs["options"] = options
+        response = self._chat_with_retry(**kwargs)
+        self._check_context(response)
         if effective_tools and response.message.tool_calls:
             return response.message
 
@@ -433,6 +436,7 @@ class OllamaCollector:
         messages: List[Dict[str, Any]],
         model:    str   = "",
         think:    Think = None,
+        options:  Optional[Dict[str, Any]] = None,
     ) -> Generator[str, None, None]:
         """Streaming multi-turn chat. Yields content chunks as they arrive.
 
@@ -445,8 +449,8 @@ class OllamaCollector:
             "messages": messages,
             "stream":   True,
         }
-        if think is not None:
-            kwargs["think"] = think
+        if think   is not None: kwargs["think"]   = think
+        if options is not None: kwargs["options"] = options
 
         for chunk in self._client.chat(**kwargs):
             content = chunk.message.content
@@ -465,6 +469,7 @@ class OllamaCollector:
         max_turns:  int   = 10,
         think:      Think = None,
         web_search: bool  = False,
+        options:    Optional[Dict[str, Any]] = None,
     ) -> str:
         """Agentic loop: auto-dispatches tool calls until model returns final text.
 
@@ -522,9 +527,10 @@ class OllamaCollector:
 
     def ask_structured(
         self,
-        query:  str,
-        schema: Any,
-        model:  str = "",
+        query:   str,
+        schema:  Any,
+        model:   str = "",
+        options: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Force JSON output matching a schema.
 
@@ -535,15 +541,19 @@ class OllamaCollector:
             Raw JSON string. Parse with e.g. ``MyModel.model_validate_json(result)``.
         """
         fmt = schema.model_json_schema() if hasattr(schema, "model_json_schema") else schema
-        response = self._client.chat(
+        effective_options: Dict[str, Any] = {"temperature": 0}
+        if options:
+            effective_options.update(options)
+        response = self._chat_with_retry(
             model    = model or self.model,
             messages = [
                 {"role": "system", "content": self.content},
                 {"role": "user",   "content": query},
             ],
             format  = fmt,
-            options = {"temperature": 0},
+            options = effective_options,
         )
+        self._check_context(response)
         return response.message.content
 
     # ------------------------------------------------------------------
@@ -577,6 +587,7 @@ class OllamaCollector:
         model:      str   = "",
         think:      Think = None,
         web_search: bool  = False,
+        options:    Optional[Dict[str, Any]] = None,
     ) -> str:
         """Async single-turn query with system prompt.
 
@@ -587,10 +598,11 @@ class OllamaCollector:
         """
         if web_search:
             return await self.async_run_with_tools(
-                query    = query,
-                tools    = self.WEB_TOOLS,
-                model    = model,
-                think    = think,
+                query   = query,
+                tools   = self.WEB_TOOLS,
+                model   = model,
+                think   = think,
+                options = options,
             )
 
         kwargs: Dict[str, Any] = {
@@ -600,10 +612,10 @@ class OllamaCollector:
                 {"role": "user",   "content": query},
             ],
         }
-        if think is not None:
-            kwargs["think"] = think
-
-        response = await self._async_client.chat(**kwargs)
+        if think   is not None: kwargs["think"]   = think
+        if options is not None: kwargs["options"] = options
+        response = await self._async_chat_with_retry(**kwargs)
+        self._check_context(response)
         return response.message.content
 
     # ------------------------------------------------------------------
@@ -618,6 +630,7 @@ class OllamaCollector:
         think:      Think = None,
         format:     Any   = None,
         web_search: bool  = False,
+        options:    Optional[Dict[str, Any]] = None,
     ) -> Union[str, "ollama.Message"]:
         """Async multi-turn chat. Same semantics as sync chat().
 
@@ -633,12 +646,12 @@ class OllamaCollector:
             "model":    model or self.model,
             "messages": messages,
         }
-        if effective_tools is not None: kwargs["tools"]  = effective_tools
-        if think           is not None: kwargs["think"]  = think
-        if format          is not None: kwargs["format"] = format
-
-        response = await self._async_client.chat(**kwargs)
-
+        if effective_tools is not None: kwargs["tools"]   = effective_tools
+        if think           is not None: kwargs["think"]   = think
+        if format          is not None: kwargs["format"]  = format
+        if options         is not None: kwargs["options"] = options
+        response = await self._async_chat_with_retry(**kwargs)
+        self._check_context(response)
         if effective_tools and response.message.tool_calls:
             return response.message
 
@@ -649,6 +662,7 @@ class OllamaCollector:
         messages: List[Dict[str, Any]],
         model:    str   = "",
         think:    Think = None,
+        options:  Optional[Dict[str, Any]] = None,
     ) -> AsyncGenerator[str, None]:
         """Async streaming chat. Yields content chunks as they arrive.
 
@@ -661,8 +675,8 @@ class OllamaCollector:
             "messages": messages,
             "stream":   True,
         }
-        if think is not None:
-            kwargs["think"] = think
+        if think   is not None: kwargs["think"]   = think
+        if options is not None: kwargs["options"] = options
 
         async for chunk in await self._async_client.chat(**kwargs):
             content = chunk.message.content
@@ -681,6 +695,7 @@ class OllamaCollector:
         max_turns:  int   = 10,
         think:      Think = None,
         web_search: bool  = False,
+        options:    Optional[Dict[str, Any]] = None,
     ) -> str:
         """Async agentic loop. Same semantics as sync run_with_tools().
 
