@@ -124,7 +124,7 @@ class OpenAICollector:
 
         try:
 
-            if len(embedder):
+            if not embedder:
                 embedder = self.embedder
 
             start_time = time.time()
