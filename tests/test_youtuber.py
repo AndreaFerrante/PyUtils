@@ -55,3 +55,64 @@ def test_format_transcript_srt():
     result = extractor.format_transcript(data, 'srt')
     assert '00:00:00' in result
     assert 'Hello world' in result
+
+
+def test_extract_transcript_single_string_returns_dict():
+    from unittest.mock import patch, MagicMock
+    from pyutils.web import YouTubeTranscriptExtractor
+
+    extractor = YouTubeTranscriptExtractor()
+    fake_data = [{'text': 'Hi', 'start': 0.0, 'duration': 1.0}]
+
+    mock_transcript = MagicMock()
+    mock_transcript.fetch.return_value = fake_data
+    mock_transcript.language = 'en'
+
+    mock_list = MagicMock()
+    mock_list.find_transcript.side_effect = Exception
+    mock_list.__iter__ = MagicMock(return_value=iter([mock_transcript]))
+
+    with patch('pyutils.web.youtuber.YouTubeTranscriptApi') as mock_api:
+        mock_api.list_transcripts.return_value = mock_list
+        result = extractor.extract_transcript('dQw4w9WgXcQ')
+
+    assert isinstance(result, dict)
+    assert 'dQw4w9WgXcQ' in result
+    assert result['dQw4w9WgXcQ'] == fake_data
+
+
+def test_extract_transcript_list_of_videos_returns_dict():
+    from unittest.mock import patch, MagicMock
+    from pyutils.web import YouTubeTranscriptExtractor
+
+    extractor = YouTubeTranscriptExtractor()
+    fake_data = [{'text': 'Hi', 'start': 0.0, 'duration': 1.0}]
+
+    def make_mock_list():
+        mock_transcript = MagicMock()
+        mock_transcript.fetch.return_value = fake_data
+        mock_transcript.language = 'en'
+        mock_list = MagicMock()
+        mock_list.find_transcript.side_effect = Exception
+        mock_list.__iter__ = MagicMock(return_value=iter([mock_transcript]))
+        return mock_list
+
+    with patch('pyutils.web.youtuber.YouTubeTranscriptApi') as mock_api:
+        mock_api.list_transcripts.side_effect = lambda vid: make_mock_list()
+        result = extractor.extract_transcript(
+            ['dQw4w9WgXcQ', 'https://youtu.be/abcdefghijk'],
+            language_codes=['en']
+        )
+
+    assert isinstance(result, dict)
+    assert len(result) == 2
+    assert 'dQw4w9WgXcQ' in result
+    assert 'abcdefghijk' in result
+
+
+def test_extract_transcript_invalid_url_returns_none_entry():
+    from pyutils.web import YouTubeTranscriptExtractor
+    extractor = YouTubeTranscriptExtractor()
+    result = extractor.extract_transcript(['not-a-valid-url-at-all-!!'])
+    assert isinstance(result, dict)
+    assert list(result.values()) == [None]
