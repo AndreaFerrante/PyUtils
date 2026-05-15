@@ -39,15 +39,16 @@ class Anonymizer:
     def _anonymize_text(self, model, text: str) -> str:
         """Replace named entities with type-keyed labels (e.g. PERSON_1)."""
         doc = model(text)
-        replacements: list[tuple[str, str]] = []
         counters: dict[str, int] = {}
+        parts: list[str] = []
+        last = 0
         for ent in doc.ents:
             counters[ent.label_] = counters.get(ent.label_, 0) + 1
-            replacements.append((ent.text, f"{ent.label_}_{counters[ent.label_]}"))
-
-        for original, label in replacements:
-            text = text.replace(original, label)
-        return text
+            parts.append(text[last:ent.start_char])
+            parts.append(f"{ent.label_}_{counters[ent.label_]}")
+            last = ent.end_char
+        parts.append(text[last:])
+        return "".join(parts)
 
     def anonymize_text(
         self,
