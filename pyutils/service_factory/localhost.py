@@ -30,11 +30,11 @@ def get_file_content(path_to_read: str, file_name: str) -> str:
 def get_files_timestamps_in_path(path_to_scan: str) -> list[tuple[str, str]]:
     """Return (filename, ctime) tuples for all files in path_to_scan, sorted newest first."""
     entries = [
-        (p.name, time.ctime(p.stat().st_ctime))
+        (p.name, p.stat().st_ctime)
         for p in Path(path_to_scan).iterdir()
         if p.is_file()
     ]
-    return sorted(entries, key=lambda x: x[1], reverse=True)
+    return [(name, time.ctime(ts)) for name, ts in sorted(entries, key=lambda x: x[1], reverse=True)]
 
 
 def get_files_zipped_in_folder(path_to_zip: str, file_extensions: list[str]) -> None:

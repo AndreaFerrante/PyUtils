@@ -724,19 +724,22 @@ class OllamaCollector:
 
     async def async_run_with_tools(
         self,
-        query:      str,
-        tools:      List[Callable],
-        model:      str   = "",
-        max_turns:  int   = 10,
-        think:      Think = None,
-        web_search: bool  = False,
-        options:    Optional[Dict[str, Any]] = None,
+        query:             str,
+        tools:             List[Callable],
+        model:             str   = "",
+        max_turns:         int   = 10,
+        think:             Think = None,
+        web_search:        bool  = False,
+        options:           Optional[Dict[str, Any]] = None,
+        confirm_tool_call: Optional[Callable[[str, dict], bool]] = None,
     ) -> str:
         """Async agentic loop. Same semantics as sync run_with_tools().
 
         Args:
-            web_search: When True, prepends ``web_search`` and ``web_fetch``
-                to the tools list. Requires OLLAMA_API_KEY in the environment.
+            web_search:        When True, prepends ``web_search`` and ``web_fetch``
+                               to the tools list. Requires OLLAMA_API_KEY in the environment.
+            confirm_tool_call: Optional HITL gate; called with (name, args) before
+                               each tool execution. Return False to decline.
         """
         effective_tools = [*self.WEB_TOOLS, *tools] if web_search else tools
         tool_map = {fn.__name__: fn for fn in effective_tools}
@@ -748,30 +751,60 @@ class OllamaCollector:
             "model": model or self.model,
             "tools": effective_tools,
         }
-        if think is not None:
-            call_kwargs["think"] = think
+        if think   is not None: call_kwargs["think"]   = think
+        if options is not None: call_kwargs["options"] = options
 
         for _ in range(max_turns):
-            response = await self._async_client.chat(**call_kwargs, messages=messages)
+            response = await self._async_chat_with_retry(**call_kwargs, messages=messages)
+            self._check_context(response)
             messages.append(response.message)
 
             if not response.message.tool_calls:
-                return response.message.content
+                return response.message.content or ""
 
             for call in response.message.tool_calls:
-                fn = tool_map.get(call.function.name)
+                name = call.function.name
+                args = call.function.arguments
+                fn   = tool_map.get(name)
                 if fn is None:
-                    raise ValueError(f"Model called unknown tool: {call.function.name!r}")
+                    raise ValueError(f"Model called unknown tool: {name!r}")
 
-                result = fn(**call.function.arguments)
-                if asyncio.iscoroutine(result):
-                    result = await result
+                try:
+                    inspect.signature(fn).bind(**args)
+                except TypeError as exc:
+                    messages.append({
+                        "role":      "tool",
+                        "content":   f"Error: invalid arguments for {name}: {exc}",
+                        "tool_name": name,
+                    })
+                    continue
 
-                messages.append({
-                    "role":      "tool",
-                    "content":   str(result),
-                    "tool_name": call.function.name,
-                })
+                effective_confirm = (
+                    confirm_tool_call if confirm_tool_call is not None
+                    else self.confirm_tool_call
+                )
+                if effective_confirm is not None and not effective_confirm(name, args):
+                    messages.append({
+                        "role":      "tool",
+                        "content":   "Tool execution declined.",
+                        "tool_name": name,
+                    })
+                    continue
+
+                if self.on_tool_call is not None:
+                    self.on_tool_call(name, args)
+
+                try:
+                    result = fn(**args)
+                    if asyncio.iscoroutine(result):
+                        result = await result
+                except Exception as exc:
+                    result = f"Error: {exc}"
+
+                if self.on_tool_result is not None:
+                    self.on_tool_result(name, result)
+
+                messages.append({"role": "tool", "content": str(result), "tool_name": name})
 
         raise RuntimeError(
             f"async_run_with_tools exceeded max_turns={max_turns} without a final answer"
