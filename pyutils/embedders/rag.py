@@ -28,7 +28,7 @@ from typing import Dict, List
 import faiss
 import numpy as np
 
-from embedder import QwenEmbedder
+from .embedder import QwenEmbedder
 
 logger = logging.getLogger(__name__)
 

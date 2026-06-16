@@ -27,8 +27,7 @@ CPU is fine. CUDA or MPS are picked up automatically when available.
 ## Quick start
 
 ```py
-from pyutils.embedders.embedder import QwenEmbedder
-from pyutils.embedders.rag import RAGPipeline
+from pyutils.embedders import QwenEmbedder, RAGPipeline
 
 embedder = QwenEmbedder(device="cpu")
 vecs = embedder.encode(["hello world", "another doc"])
