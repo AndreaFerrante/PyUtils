@@ -1,3 +1,3 @@
-from pyutils.embedders.embedder import MiniLMEmbedder
+from .embedder import QwenEmbedder
 
-__all__ = ["MiniLMEmbedder"]
+__all__ = ["QwenEmbedder"]
