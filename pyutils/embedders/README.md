@@ -1,66 +1,58 @@
 # pyutils.embedders
 
-Lightweight text embedding and RAG utilities using the `all-MiniLM-L6-v2` model.
+Qwen3-based text embedding and retrieval helpers. Use the embedder for normalized 1024-d vectors, and the RAG pipeline when you need exact cosine retrieval over chunked documents.
 
-This package provides:
-- `MiniLMEmbedder` — production-ready encoder producing L2-normalised 384-d vectors.
-- `Chunker`, `VectorStore`, `RAGPipeline` — minimal RAG pipeline for indexing and retrieval.
+## What it provides
+
+- `QwenEmbedder`: batched text encoding with last-token pooling.
+- `encode_document(...)`: late chunking for long documents. It runs one forward pass over the full text, then mean-pools token windows into chunk embeddings.
+- `FAISSStore`: exact cosine search over L2-normalized vectors.
+- `RAGPipeline`: document indexing plus retrieval on top of the embedder.
+
+## Why this design
+
+- Query and document embeddings come from the same model, so retrieval stays consistent.
+- L2 normalization makes cosine similarity equal to dot product.
+- Late chunking keeps more document context than embedding chunks independently.
+- `IndexFlatIP` keeps retrieval exact and easy to reason about.
 
 ## Install
 
-Install the recommended stack:
-
 ```bash
-pip install sentence-transformers>=5.0.0 numpy
+pip install transformers>=4.51.0 torch numpy faiss-cpu
 ```
 
-You can avoid the `sentence-transformers` dependency by using the `transformers` backend, but you'll need `transformers` and `torch` installed.
+CPU is fine. CUDA or MPS are picked up automatically when available.
 
-## Quick usage
-
-Minimal embedder usage:
+## Quick start
 
 ```py
-from pyutils.embedders import MiniLMEmbedder
-
-embedder = MiniLMEmbedder()  # auto device, sentence-transformers backend
-vecs = embedder.encode(["hello world", "another doc"])  # shape (N, 384), float32
-```
-
-Notes:
-- Returned vectors are L2-normalised; cosine similarity == dot product.
-- The model has a hard token limit of 256 word-pieces; chunk long documents first.
-
-RAG quick-start:
-
-```py
+from pyutils.embedders.embedder import QwenEmbedder
 from pyutils.embedders.rag import RAGPipeline
 
-rag = RAGPipeline()  # uses MiniLMEmbedder + default Chunker
-rag.index(["Long document text...", "Another document..."], doc_ids=["d1","d2"])
+embedder = QwenEmbedder(device="cpu")
+vecs = embedder.encode(["hello world", "another doc"])
+
+chunk_texts, chunk_vecs = embedder.encode_document("long document...", chunk_tokens=512)
+
+rag = RAGPipeline(embedder=embedder, chunk_tokens=128)
+rag.index(["doc one text", "doc two text"], doc_ids=["d1", "d2"])
 results = rag.query("What is X?", top_k=3)
-for r in results:
-    print(r["score"], r["doc_id"], r["text"])
 ```
 
-APIs (concise)
-- `MiniLMEmbedder(device=None, batch_size=64, backend='sentence-transformers', cache_dir=None)`
-  - `encode(texts: str|List[str], show_progress=False) -> np.ndarray` — returns (N,384) float32 L2-normalised vectors.
-- `Chunker(max_tokens=200, overlap_tokens=20)` — token-precise splitter; use before embedding long docs.
-- `RAGPipeline(embedder=None, chunker=None, show_progress=False)`
-  - `index(documents: List[str], doc_ids: List[str]|None=None, metadatas: List[dict]|None=None)`
-  - `query(query: str, top_k: int = 5) -> List[dict]` — each result: `{"score","text","doc_id","chunk_idx","metadata"}`
+Each result is a dict with `score`, `text`, `doc_id`, `chunk_idx`, and `metadata`.
 
-Examples and a smoke test are provided in `example.py`.
+## API
 
-## Tips
-- For large corpora, replace the in-memory `VectorStore` with FAISS or hnswlib; current store is brute-force O(N·d).
-- If you need exact control of tokenisation/chunk sizes, pass a `tokenizer_id` to `Chunker` matching your LLM.
+- `QwenEmbedder(device=None, batch_size=8)`
+- `encode(texts, is_query=False, task=DEFAULT_TASK) -> np.ndarray`
+- `encode_document(text, chunk_tokens=512) -> tuple[list[str], np.ndarray]`
+- `RAGPipeline(embedder=None, chunk_tokens=512, task=DEFAULT_TASK)`
+- `index(documents, doc_ids=None, metadatas=None) -> None`
+- `query(text, top_k=5) -> list[dict]`
 
 ## Files
-- `embedder.py` — embedder implementation and constants.
-- `rag.py` — Chunker, VectorStore, and RAGPipeline.
-- `example.py` — runnable demo and smoke test.
 
----
-Created for quick integration and prototyping — focused on correct pooling, L2 normalisation, and simple RAG workflows.
+- `embedder.py` - Qwen embedder and late chunking.
+- `rag.py` - FAISS store and RAG pipeline.
+- `example.py` - local CPU smoke test.
