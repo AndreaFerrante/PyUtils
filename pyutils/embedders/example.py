@@ -92,7 +92,8 @@ docs = [
      "A single piece of bad news can flip the whole position from profitable to losing fast"
      "Volatility spikes and you get hit with bad slippage when trying to get out"
      "In markets like options and futures, crowded longs show up as clustering of bullish bets."
-     "When they unwind, it usually happens hard and fast because there's no real conviction left—just traders piling in together.")
+     "When they unwind, it usually happens hard and fast because there's no real conviction left—just traders piling in together."
+     )
 ]
 
 rag = RAGPipeline(embedder=embedder, chunk_tokens=512)
@@ -102,20 +103,19 @@ print(f"Indexed {len(rag)} chunks\n")
 # For a large corpus, swap in an approximate index for speed/memory. Same
 # pipeline, same results format — only the retrieval index changes:
 #
-
-from rag import FAISSStore
-store = FAISSStore(dim=embedder.dim, index_type="hnsw")
-rag = RAGPipeline(embedder=embedder, store=store)
-print(f"Indexed {len(rag)} chunks\n")
+# from rag import FAISSStore
+# store = FAISSStore(dim=embedder.dim, index_type="hnsw")
+# rag = RAGPipeline(embedder=embedder, store=store)
+# print(f"Indexed {len(rag)} chunks\n")
 
 queries = [
     "How do dealers affect ES price action?",
     "What is a crowded long position?",
-    "Explain cumulative volume delta divergence",
+    "Explain cumulative delta",
 ]
 
 for q in queries:
     print(f"Q: {q}")
-    for r in rag.query(q, top_k=3):
+    for r in rag.query(q, top_k=2):
         print(f"  [{r['score']:.3f}] ({r['doc_id']}) {r['text'][:20]}...")
     print()
