@@ -27,7 +27,6 @@
 #     print(f"A: {call_lmstudio(q)}")
 #     print()
 
-
 import requests
 import json
 import os
