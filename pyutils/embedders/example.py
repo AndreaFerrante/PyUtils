@@ -15,7 +15,7 @@ from rag import RAGPipeline
 # 1. Bare embedder
 # ------------------------------------------------------------------
 print("=== QwenEmbedder ===\n")
-embedder = QwenEmbedder(device="cpu")
+embedder = QwenEmbedder(device="cuda")
 
 # Standard encoding — short texts
 vecs = embedder.encode(["hello world", "machine learning"])
@@ -84,19 +84,29 @@ docs = [
         "a key tape-reading signal for intraday ES entries, particularly at VWAP and "
         "prior-session high/low levels where institutional flow tends to cluster."
     ),
+    # doc 3 — crowded positions
+    ("A crowded long position is when many traders are all betting that "
+     "an asset's price will go up at the same time. This creates risk because:"
+     "There are lots of people wanting to sell, but not many buyers to absorb their selling"
+     "When the trade breaks, everyone tries to exit at once, causing a sharp price drop"
+     "A single piece of bad news can flip the whole position from profitable to losing fast"
+     "Volatility spikes and you get hit with bad slippage when trying to get out"
+     "In markets like options and futures, crowded longs show up as clustering of bullish bets."
+     "When they unwind, it usually happens hard and fast because there's no real conviction left—just traders piling in together.")
 ]
 
-rag = RAGPipeline(embedder=embedder, chunk_tokens=128)
-rag.index(docs) #, doc_ids=["gex", "cot", "cvd"])
+rag = RAGPipeline(embedder=embedder, chunk_tokens=512)
+rag.index(docs)
 print(f"Indexed {len(rag)} chunks\n")
 
 # For a large corpus, swap in an approximate index for speed/memory. Same
 # pipeline, same results format — only the retrieval index changes:
 #
-#     from rag import FAISSStore
-#     store = FAISSStore(dim=embedder.dim, index_type="hnsw")
-#     rag = RAGPipeline(embedder=embedder, store=store)
 
+from rag import FAISSStore
+store = FAISSStore(dim=embedder.dim, index_type="hnsw")
+rag = RAGPipeline(embedder=embedder, store=store)
+print(f"Indexed {len(rag)} chunks\n")
 
 queries = [
     "How do dealers affect ES price action?",
@@ -106,6 +116,6 @@ queries = [
 
 for q in queries:
     print(f"Q: {q}")
-    for r in rag.query(q, top_k=2):
-        print(f"  [{r['score']:.3f}] ({r['doc_id']}) {r['text'][:100]}...")
+    for r in rag.query(q, top_k=3):
+        print(f"  [{r['score']:.3f}] ({r['doc_id']}) {r['text'][:20]}...")
     print()
