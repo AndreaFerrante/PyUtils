@@ -12,7 +12,7 @@ Model facts (HuggingFace model card, June 2025):
 
 Two encoding modes:
     encode()           — standard batched encoding, last-token pool
-    encode_document()  — late chunking: one forward pass, mean-pool per window
+    encode_document()  — late chunking: one forward pass, last-token pool per window
 
 Requirements:
     pip install transformers>=4.51.0 torch numpy
@@ -174,30 +174,36 @@ class QwenEmbedder:
         Late chunking: embed a full document, return chunk-level vectors.
 
         How it works:
-            1. Tokenize full document (up to MAX_SEQ_TOKENS)
-            2. One forward pass → hidden state per token
-               Each token's state already sees all preceding tokens
-               (causal attention over the full document).
-            3. Split the hidden states into windows of chunk_tokens
-            4. Mean-pool each window → one embedding per chunk
-            5. L2-normalise
+            1. Tokenize the full document (up to MAX_SEQ_TOKENS).
+            2. One forward pass → one hidden state per token. Under causal
+               attention, each token's state already sees every token before
+               it — so a token near the end of chunk 2 has "read" chunk 1.
+            3. Split the token positions into windows of chunk_tokens.
+            4. Represent each window by the hidden state of its LAST token.
+            5. L2-normalise.
 
-        Why this beats naive chunking:
-            Naive: chunk first, embed each chunk in isolation.
-                   A pronoun in chunk 3 that refers to chunk 1 = lost context.
-            Late:  the transformer sees the whole document before we split.
-                   Every token's hidden state carries context from all
-                   preceding tokens. Mean-pooling preserves that context.
+        Why last-token (not mean) pooling:
+            Qwen3-Embedding is trained so the final token's hidden state
+            summarises the sequence. Queries are pooled the same way, so
+            query and chunk vectors live in the same space and their cosine
+            similarity is meaningful. Mean-pooling would (a) mismatch the
+            query space and (b) use an aggregation the model never learned.
+
+        Why this still preserves cross-chunk context:
+            The last token of each window has causally attended over all
+            preceding text, including earlier chunks. So later chunks carry
+            context from earlier ones — the whole point of late chunking.
 
         Args:
-            text:          raw document string (any length, truncated at 32k tokens)
+            text:          raw document string (truncated at 32k tokens)
             chunk_tokens:  tokens per chunk window (no overlap needed — the
                            model's causal attention provides cross-chunk context)
 
         Returns:
             (chunk_texts, embeddings) where
                 chunk_texts : list[str] — decoded text per chunk
-                embeddings  : (n_chunks, 1024) float32, L2-normalised
+                embeddings  : (n_chunks, 1024) float32, L2-normalised.
+                              Empty input → ([], zeros (0, 1024)).
         """
         encoded = self._tokenizer(
             text,
@@ -207,11 +213,15 @@ class QwenEmbedder:
             return_tensors="pt",
         ).to(self.device)
 
+        token_ids = encoded["input_ids"][0]           # (seq_len,)
+        seq_len = token_ids.size(0)
+
+        if seq_len == 0:                              # empty / whitespace text
+            return [], np.zeros((0, EMBEDDING_DIM), dtype=np.float32)
+
         with torch.no_grad():
             out = self._model(**encoded)
-        hidden = out.last_hidden_state[0]            # (seq_len, 1024)
-        token_ids = encoded["input_ids"][0]           # (seq_len,)
-        seq_len = hidden.size(0)
+        hidden = out.last_hidden_state[0]             # (seq_len, 1024)
 
         chunk_texts: List[str] = []
         chunk_vecs: List[torch.Tensor] = []
@@ -219,10 +229,10 @@ class QwenEmbedder:
         for start in range(0, seq_len, chunk_tokens):
             end = min(start + chunk_tokens, seq_len)
 
-            # Mean-pool this window's hidden states
-            chunk_vecs.append(hidden[start:end].mean(dim=0))
+            # Represent the window by its last token (matches query pooling).
+            chunk_vecs.append(hidden[end - 1])
 
-            # Decode token ids back to readable text
+            # Decode this window's tokens back to readable text.
             ids = token_ids[start:end]
             chunk_texts.append(
                 self._tokenizer.decode(ids, skip_special_tokens=True).strip()
