@@ -87,7 +87,7 @@ docs = [
 ]
 
 rag = RAGPipeline(embedder=embedder, chunk_tokens=128)
-rag.index(docs, doc_ids=["gex", "cot", "cvd"])
+rag.index(docs) #, doc_ids=["gex", "cot", "cvd"])
 print(f"Indexed {len(rag)} chunks\n")
 
 # For a large corpus, swap in an approximate index for speed/memory. Same

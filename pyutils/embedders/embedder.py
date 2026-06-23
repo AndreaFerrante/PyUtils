@@ -157,7 +157,7 @@ class QwenEmbedder:
 
             pooled = _last_token_pool(out.last_hidden_state, encoded["attention_mask"])
             normed = F.normalize(pooled, p=2, dim=1)
-            parts.append(normed.cpu().numpy())
+            parts.append(normed.float().cpu().numpy())
 
         return np.vstack(parts).astype(np.float32)
 
@@ -241,4 +241,4 @@ class QwenEmbedder:
         embeddings = torch.stack(chunk_vecs)
         embeddings = F.normalize(embeddings, p=2, dim=1)
 
-        return chunk_texts, embeddings.cpu().numpy().astype(np.float32)
+        return chunk_texts, embeddings.float().cpu().numpy()
