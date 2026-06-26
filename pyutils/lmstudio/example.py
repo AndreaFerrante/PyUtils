@@ -14,18 +14,21 @@ Edit the CONFIG block to match models you actually have loaded.
 
 from __future__ import annotations
 
+import os
+
 from lmstudio import LMStudio, LMStudioError
 
 # --------------------------------------------------------------------------- #
 # CONFIG — change these to identifiers from `lm.list_models()`                 #
 # --------------------------------------------------------------------------- #
-HOST = "localhost:1234"
-MODEL = "qwen2.5-7b-instruct"                       # any loaded LLM
-VISION_MODEL = "qwen2-vl-7b-instruct"               # a VLM, for chat_with_image
-EMBED_MODEL = "text-embedding-nomic-embed-text-v1.5"  # an embedding model
-IMAGE_PATH = "test.jpg"                             # local file, URL, or data URI
-DOWNLOAD_MODEL = "ibm/granite-4-micro"              # used only if RUN_MUTATING
-RUN_MUTATING = False                                # set True to run load/unload/download
+HOST           = "localhost:1233"
+API_TOKEN      = os.getenv("LM_API_TOKEN")               # required only if LM Studio auth is ON
+MODEL          = "google/gemma-4-26b-a4b-qat"            # any loaded LLM
+VISION_MODEL   = "google/gemma-4-26b-a4b-qat"            # a VLM, for chat_with_image
+EMBED_MODEL    = "Qwen/Qwen3-Embedding-0.6B-GGUF"        # an embedding model
+IMAGE_PATH     = "test.jpg"                              # local file, URL, or data URI
+DOWNLOAD_MODEL = "ibm/granite-4-micro"                   # used only if RUN_MUTATING
+RUN_MUTATING   = False                                   # set True to run load/unload/download
 
 
 # --------------------------------------------------------------------------- #
@@ -147,10 +150,11 @@ def example_download(lm: LMStudio) -> None:
 # Main                                                                         #
 # --------------------------------------------------------------------------- #
 def main() -> None:
-    lm = LMStudio(host=HOST)  # reads LM_API_TOKEN from the environment if set
+    lm = LMStudio(host=HOST, api_token=API_TOKEN)
 
     print("=" * 70)
     print("LM STUDIO CLIENT — EXAMPLES")
+    print(f"Auth token: {'configured' if API_TOKEN else 'not configured'}")
     print("=" * 70)
 
     # Read-only / safe
