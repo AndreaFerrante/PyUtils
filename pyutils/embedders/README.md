@@ -2,9 +2,38 @@
 
 A small, readable pipeline that takes your documents, turns them into lists of
 numbers that capture meaning, and finds the passages most relevant to a
-question. It is built on the `Qwen3-Embedding-0.6B` model and an exact
-similarity-search index, and it runs on an ordinary computer — no graphics card
-required.
+question. It defaults to the `Qwen3-Embedding-0.6B` model and an exact
+similarity-search index. It automatically uses CUDA when available, then Apple
+Silicon MPS, then CPU.
+
+## Device selection
+
+Apple Silicon requires a PyTorch build with MPS support. Check availability with:
+
+```python
+import torch
+
+print(torch.backends.mps.is_available())
+```
+
+No device argument is needed in normal use. Pass `device="cpu"` only when you
+need to override automatic selection.
+
+## Model selection
+
+`QwenEmbedder()` loads `Qwen/Qwen3-Embedding-0.6B` by default. Select another
+compatible model with `model_id`:
+
+```python
+from pyutils.embedders import QwenEmbedder
+
+embedder = QwenEmbedder(model_id="Qwen/Qwen3-Embedding-4B")
+```
+
+Selected models must load through `AutoTokenizer` and `AutoModel`, expose
+`last_hidden_state`, and use meaningful last-token pooling. `embedder.dim`
+reports the loaded model's output width. `RAGPipeline` uses that width for its
+default `FAISSStore`; pass `dim=embedder.dim` when constructing a store yourself.
 
 ## How the pieces fit together
 
@@ -39,7 +68,7 @@ qwen-rag/
 ## Install
 
 ```bash
-pip install -r requirements.txt
+pip install .
 ```
 
 The first run downloads the model (about 1.2 GB) from Hugging Face and caches it.
@@ -47,7 +76,7 @@ The first run downloads the model (about 1.2 GB) from Hugging Face and caches it
 ## Quick start
 
 ```python
-from rag import RAGPipeline
+from pyutils.embedders import RAGPipeline
 
 rag = RAGPipeline()                       # loads the model once
 rag.index([
@@ -187,16 +216,53 @@ python tests/test_rag.py
 collection, build the store yourself and hand it to the pipeline:
 
 ```python
-from rag import RAGPipeline, FAISSStore
+from pyutils.embedders import FAISSStore, QwenEmbedder, RAGPipeline
 
-store = FAISSStore(dim=1024, index_type="hnsw")   # dim must match the model
-rag = RAGPipeline(store=store)
+embedder = QwenEmbedder()
+store = FAISSStore(dim=embedder.dim, index_type="hnsw")
+rag = RAGPipeline(embedder=embedder, store=store)
 ```
 
 `index_type` is one of `"flat"` (exact, the default), `"ivf"` (clustered),
 `"hnsw"` (graph), or `"ivfpq"` (compressed). The store buffers vectors and
 builds the index once, on the first search, so the clustered and compressed
 indexes can train on the whole collection at that point.
+
+## JSONL retrieval with LM Studio
+
+`jsonl_lmstudio_pipeline` reads a JSONL file with Polars, embeds each non-empty
+`text` value through LM Studio, retrieves the most similar records for a query,
+then asks a separate LM Studio chat model to answer from those retrieved records.
+
+Install the optional JSONL dependency from the repository root:
+
+```bash
+pip install ".[jsonl]"
+```
+
+Each JSONL line must contain `text`. An optional `id` field is preserved as the
+retrieval source id:
+
+```json
+{"id": "note-1", "text": "VWAP is the volume-weighted average price."}
+{"id": "note-2", "text": "CVD measures cumulative aggressive buying and selling."}
+```
+
+Start LM Studio's local server, then load an embedding model and a chat model.
+Use the same embedding model for document indexing and the query:
+
+```bash
+python -m pyutils.embedders.jsonl_lmstudio_pipeline notes.jsonl \
+  --id-column id \
+  --embedding-model text-embedding-model \
+  --chat-model chat-model \
+  --query "What does VWAP measure?" \
+  --top-k 3
+```
+
+The command prints the chat answer, then each retrieved source id and cosine
+score. Text is sent to the LM Studio server configured by `LMStudio`; it stays
+local when that server is local.
 
 ## Review notes (fixed)
 

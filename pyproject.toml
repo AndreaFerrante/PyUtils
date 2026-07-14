@@ -36,6 +36,11 @@ dependencies = [
     "faiss-cpu>=1.7.4",
 ]
 
+[project.optional-dependencies]
+jsonl = [
+    "polars>=1.0.0",
+]
+
 [project.urls]
 Homepage = "https://github.com/AndreaFerrante/PyUtils"
 

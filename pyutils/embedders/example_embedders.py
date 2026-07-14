@@ -1,21 +1,21 @@
-"""
-example.py — usage demo (CPU-only, no GPU required)
+"""Usage demo with automatic CUDA, Apple MPS, or CPU selection.
 
 Install:
     pip install transformers>=4.51.0 torch numpy faiss-cpu
 
 Run:
-    python example.py
+    python -m pyutils.embedders.example
 """
 
-from embedder import QwenEmbedder
-from rag import RAGPipeline
+from pyutils.embedders import QwenEmbedder, RAGPipeline
 
 # ------------------------------------------------------------------
 # 1. Bare embedder
 # ------------------------------------------------------------------
 print("=== QwenEmbedder ===\n")
-embedder = QwenEmbedder(device="cuda")
+embedder = QwenEmbedder()
+# To override default Qwen3-Embedding-0.6B:
+# embedder = QwenEmbedder(model_id="Qwen/Qwen3-Embedding-4B")
 
 # Standard encoding — short texts
 vecs = embedder.encode(["hello world", "machine learning"])
@@ -103,7 +103,7 @@ print(f"Indexed {len(rag)} chunks\n")
 # For a large corpus, swap in an approximate index for speed/memory. Same
 # pipeline, same results format — only the retrieval index changes:
 #
-# from rag import FAISSStore
+# from pyutils.embedders import FAISSStore
 # store = FAISSStore(dim=embedder.dim, index_type="hnsw")
 # rag = RAGPipeline(embedder=embedder, store=store)
 # print(f"Indexed {len(rag)} chunks\n")

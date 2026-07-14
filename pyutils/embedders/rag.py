@@ -11,7 +11,7 @@ Requirements:
     pip install transformers>=4.51.0 torch numpy faiss-cpu
 
 Quick-start:
-    from rag import RAGPipeline
+    from pyutils.embedders import RAGPipeline
 
     rag = RAGPipeline()
     rag.index(["Your long document...", "Another document..."])
@@ -301,8 +301,8 @@ class RAGPipeline:
         results = rag.query("your question", top_k=5)
 
         # large corpus, approximate index:
-        from rag import FAISSStore
-        store = FAISSStore(dim=1024, index_type="hnsw")   # dim must match the model
+        from pyutils.embedders import FAISSStore
+        store = FAISSStore(dim=embedder.dim, index_type="hnsw")
         rag = RAGPipeline(store=store)
     """
 

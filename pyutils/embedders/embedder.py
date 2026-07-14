@@ -1,7 +1,7 @@
 """
-embedder.py — Qwen3-Embedding-0.6B text embedder with late chunking.
+embedder.py — configurable text embedder with Qwen3-Embedding-0.6B default.
 
-Model facts (HuggingFace model card, June 2025):
+Default model facts (HuggingFace model card, June 2025):
     Model       : Qwen/Qwen3-Embedding-0.6B (0.6B params, 28 layers)
     Output dim  : 1024  (MRL: truncatable to 32–1024)
     Context     : 32 768 tokens
@@ -16,6 +16,9 @@ Two encoding modes:
 
 Requirements:
     pip install transformers>=4.51.0 torch numpy
+
+Device selection is automatic: CUDA, then Apple Silicon MPS, then CPU.
+MPS requires a PyTorch build with MPS support.
 """
 
 from __future__ import annotations
@@ -79,7 +82,7 @@ def _auto_device() -> str:
 
 class QwenEmbedder:
     """
-    Encodes text → L2-normalised 1024-d float32 vectors.
+    Encodes text into L2-normalised float32 vectors.
 
     Standard mode (queries & short texts):
         vecs = embedder.encode(["query 1", "query 2"], is_query=True)
@@ -87,32 +90,36 @@ class QwenEmbedder:
     Late chunking mode (documents):
         texts, vecs = embedder.encode_document("long document ...", chunk_tokens=512)
         # texts[i] = decoded chunk string
-        # vecs.shape = (n_chunks, 1024)
+        # vecs.shape = (n_chunks, embedder.dim)
 
     Args:
         device:     "cuda" | "mps" | "cpu" | None (auto)
         batch_size: texts per forward pass for encode()
+        model_id:   Hugging Face model id (default: Qwen3-Embedding-0.6B)
     """
 
     def __init__(
         self,
         device: str | None = None,
         batch_size: int = 8,
+        model_id: str = MODEL_ID,
     ) -> None:
         self.device = device or _auto_device()
         self.batch_size = batch_size
+        self.model_id = model_id
 
         self._tokenizer = AutoTokenizer.from_pretrained(
-            MODEL_ID, padding_side="left",
+            self.model_id, padding_side="left",
         )
-        self._model = AutoModel.from_pretrained(MODEL_ID)
+        self._model = AutoModel.from_pretrained(self.model_id)
         self._model.to(self.device).eval()
+        self._dim = self._model.config.hidden_size
 
-        logger.info("QwenEmbedder ready — device=%s", self.device)
+        logger.info("Embedder ready — model=%s device=%s", self.model_id, self.device)
 
     @property
     def dim(self) -> int:
-        return EMBEDDING_DIM
+        return self._dim
 
     # ------------------------------------------------------------------
     # Standard encode — batched, last-token pool
@@ -133,7 +140,8 @@ class QwenEmbedder:
             task:     instruction string (only used when is_query=True)
 
         Returns:
-            (N, 1024) float32, L2-normalised.
+            (N, dim) float32, L2-normalised, where dim is the selected model's
+            hidden size.
         """
         if isinstance(texts, str):
             texts = [texts]
@@ -202,8 +210,8 @@ class QwenEmbedder:
         Returns:
             (chunk_texts, embeddings) where
                 chunk_texts : list[str] — decoded text per chunk
-                embeddings  : (n_chunks, 1024) float32, L2-normalised.
-                              Empty input → ([], zeros (0, 1024)).
+                embeddings  : (n_chunks, dim) float32, L2-normalised.
+                              Empty input → ([], zeros (0, dim)).
         """
         encoded = self._tokenizer(
             text,
@@ -217,11 +225,11 @@ class QwenEmbedder:
         seq_len = token_ids.size(0)
 
         if seq_len == 0:                              # empty / whitespace text
-            return [], np.zeros((0, EMBEDDING_DIM), dtype=np.float32)
+            return [], np.zeros((0, self.dim), dtype=np.float32)
 
         with torch.no_grad():
             out = self._model(**encoded)
-        hidden = out.last_hidden_state[0]             # (seq_len, 1024)
+        hidden = out.last_hidden_state[0]             # (seq_len, dim)
 
         chunk_texts: List[str] = []
         chunk_vecs: List[torch.Tensor] = []
