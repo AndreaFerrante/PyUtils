@@ -1,4 +1,4 @@
 from .embedder import QwenEmbedder
-from .rag import RAGPipeline
+from .rag import FAISSStore, RAGPipeline
 
-__all__ = ["QwenEmbedder", "RAGPipeline"]
+__all__ = ["FAISSStore", "QwenEmbedder", "RAGPipeline"]

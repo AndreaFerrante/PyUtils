@@ -11,18 +11,17 @@ Run:
     python  tests/test_rag.py       # plain python also works
 """
 
-import os
-import sys
-
 import numpy as np
 import torch
 import torch.nn.functional as F
 
-# Make the project root importable when run directly.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from embedder import _last_token_pool, EMBEDDING_DIM, MAX_SEQ_TOKENS, MODEL_ID
-from rag import Chunk, FAISSStore
+from pyutils.embedders.embedder import (
+    EMBEDDING_DIM,
+    MAX_SEQ_TOKENS,
+    MODEL_ID,
+    _last_token_pool,
+)
+from pyutils.embedders.rag import Chunk, FAISSStore
 
 
 # ---------------------------------------------------------------------------

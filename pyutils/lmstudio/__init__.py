@@ -1,3 +1,3 @@
-from pyutils.lmstudio.lmstudio import call_lmstudio
+from .lmstudio import LMStudio, LMStudioError
 
-__all__ = ["call_lmstudio"]
+__all__ = ["LMStudio", "LMStudioError"]

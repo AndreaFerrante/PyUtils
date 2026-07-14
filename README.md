@@ -8,11 +8,19 @@ A personal Python utility library covering date/time helpers, file system operat
 pip install .
 ```
 
+This installs every runtime dependency, including the optional local RAG stack.
+
 ```bash
 pip uninstall pyutils
 ```
 
 Requires Python >= 3.11.
+
+Run the test suite with:
+
+```bash
+pytest
+```
 
 ---
 
@@ -51,6 +59,12 @@ result = anonymizer.anonymize_text(
     text_to_anonymize="John Wayne filed a claim on January 29 2025.",
     spacy_size_model='lg'   # sm / md / lg
 )
+```
+
+Download the spaCy model you select before using it:
+
+```bash
+python -m spacy download en_core_web_lg
 ```
 
 ---
@@ -171,6 +185,60 @@ Also available as a CLI:
 ```bash
 python -m pyutils.openai.openai_collector --query "What is entropy?" --api_key sk-... --model gpt-4.1-nano
 ```
+
+---
+
+### `pyutils.ollama`
+
+#### `ollama_collector` — Ollama client for local agentic workflows
+
+Requires [Ollama](https://ollama.com) running locally, by default at `http://localhost:11434`.
+
+```python
+from pyutils.ollama.ollama_collector import OllamaCollector
+
+collector = OllamaCollector(model="llama3.2")
+answer = collector.ask("Explain VWAP in one sentence.")
+embeddings = collector.embed(["first document", "second document"])
+```
+
+It also supports streaming, structured output, tool-call loops, vision, async methods, and model management. Set `OLLAMA_API_KEY` to enable the optional web-search tools.
+
+---
+
+### `pyutils.embedders`
+
+#### `embedder` and `rag` — Qwen embeddings and local document retrieval
+
+The first use downloads the `Qwen/Qwen3-Embedding-0.6B` model (about 1.2 GB) from Hugging Face.
+
+```python
+from pyutils.embedders import RAGPipeline
+
+rag = RAGPipeline()
+rag.index(["VWAP measures the volume-weighted average price."])
+hits = rag.query("What does VWAP measure?", top_k=1)
+```
+
+For direct control of the vector index, import `FAISSStore` from `pyutils.embedders`.
+
+---
+
+### `pyutils.lmstudio`
+
+#### `lmstudio` — LM Studio REST client
+
+Requires LM Studio's local server to be running, by default at `localhost:1234`.
+
+```python
+from pyutils.lmstudio import LMStudio
+
+client = LMStudio()
+answer = client.chat("Explain VWAP in one sentence.", model="default")
+embeddings = client.embed("VWAP")
+```
+
+The client also supports streaming, vision, stateful chat, and model management. Set `LM_API_TOKEN` when LM Studio authentication is enabled.
 
 ---
 
