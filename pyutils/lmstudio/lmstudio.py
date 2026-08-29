@@ -17,10 +17,31 @@ Docs: https://lmstudio.ai/docs/developer/rest
 from __future__ import annotations
 
 import base64
+import csv
+import json
 import os
 from typing import Any
 
 import requests
+
+
+_EXTRACT_SYSTEM_PROMPTS: dict[str, str] = {
+    "json": (
+        "You extract information from documents. "
+        "Reply with only a single valid JSON value and nothing else. "
+        "No prose, no explanation, no Markdown code fences."
+    ),
+    "txt": (
+        "You extract information from documents. "
+        "Reply with only the extracted information as plain text. "
+        "No prose framing, no Markdown code fences."
+    ),
+    "csv": (
+        "You extract information from documents. "
+        "Reply with only CSV: a header row followed by data rows. "
+        "No prose, no explanation, no Markdown code fences."
+    ),
+}
 
 
 class LMStudioError(RuntimeError):
@@ -224,6 +245,66 @@ class LMStudio:
             delta = chunk["choices"][0]["delta"].get("content")
             if delta:
                 yield delta
+
+    def extract_from_pdf(
+        self,
+        pdf_path: str,
+        instruction: str,
+        model: str = "default",
+        output_format: str = "json",
+        temperature: float = 0.0,
+        max_tokens: int = -1,
+    ) -> dict | list | str:
+        """
+        Extract information from a PDF with a local LLM.
+
+        The PDF's entire text layer is sent to the chat model in one request,
+        prefixed by `instruction`. No retrieval or chunking is performed; if the
+        text exceeds the model's context window LM Studio errors and that is
+        raised as LMStudioError.
+
+        output_format:
+            "json" -> reply parsed with json.loads; returns dict or list
+            "txt"  -> reply returned as a stripped str
+            "csv"  -> reply returned as a CSV str (checked as parseable)
+
+        Raises:
+            ValueError        if output_format is not "json" / "txt" / "csv"
+            FileNotFoundError if pdf_path does not exist
+            LMStudioError     if the PDF has no text layer, the server errors,
+                              or a "json"/"csv" reply cannot be parsed
+
+        POST /v1/chat/completions  (via self.chat)
+        """
+        if output_format not in _EXTRACT_SYSTEM_PROMPTS:
+            raise ValueError(
+                f"output_format must be one of {sorted(_EXTRACT_SYSTEM_PROMPTS)}, "
+                f"got {output_format!r}"
+            )
+
+        from pyutils.service_factory.pdf import scrape_pdf_content
+
+        text = scrape_pdf_content(pdf_path)
+        if not text.strip():
+            raise LMStudioError(
+                f"PDF has no extractable text: {pdf_path}. "
+                f"It may be scanned images that require OCR."
+            )
+
+        messages = [
+            {"role": "system", "content": _EXTRACT_SYSTEM_PROMPTS[output_format]},
+            {"role": "user", "content": f"{instruction}\n\nDocument:\n{text}"},
+        ]
+        reply = self.chat(
+            messages, model=model, temperature=temperature, max_tokens=max_tokens
+        )
+
+        if output_format == "txt":
+            return reply.strip()
+
+        raise LMStudioError(
+            f"output_format={output_format!r} handling not yet implemented"
+        )
 
     # ------------------------------------------------------------------ #
     # Native stateful chat  (/api/v1/chat)                               #
