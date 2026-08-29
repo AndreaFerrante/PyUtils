@@ -186,3 +186,14 @@ def test_empty_csv_reply_raises_lmstudioerror(monkeypatch, pdf_path):
     lm = make_client(monkeypatch, "   ")
     with pytest.raises(LMStudioError):
         lm.extract_from_pdf(pdf_path, "x", output_format="csv")
+
+
+def test_chat_error_propagates(monkeypatch, pdf_path):
+    lm = LMStudio()
+
+    def boom(*args, **kwargs):
+        raise LMStudioError("server on fire")
+
+    monkeypatch.setattr(lm, "chat", boom)
+    with pytest.raises(LMStudioError, match="server on fire"):
+        lm.extract_from_pdf(pdf_path, "x", output_format="json")

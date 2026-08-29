@@ -50,6 +50,9 @@ def _strip_code_fence(reply: str) -> str:
     Small models often wrap structured output in ```json ... ``` despite being
     told not to. Handles a bare ``` opener or a language-tagged one. If the text
     is not a complete fenced block it is returned stripped but otherwise intact.
+
+    A reply with prose after the closing fence, or a one-line fence, is NOT
+    unwrapped — it falls through to the caller's parser, which then fails loudly.
     """
     text = reply.strip()
     if not text.startswith("```"):
@@ -270,7 +273,7 @@ class LMStudio:
         output_format: str = "json",
         temperature: float = 0.0,
         max_tokens: int = -1,
-    ) -> dict | list | str:
+    ) -> Any:
         """
         Extract information from a PDF with a local LLM.
 
@@ -280,7 +283,9 @@ class LMStudio:
         raised as LMStudioError.
 
         output_format:
-            "json" -> reply parsed with json.loads; returns dict or list
+            "json" -> reply parsed with json.loads; returns any JSON value
+                      (usually a dict or list, but a bare string/number/bool/
+                      null is returned as-is)
             "txt"  -> reply returned as a stripped str
             "csv"  -> reply returned as a CSV str (checked as parseable)
 
@@ -289,6 +294,7 @@ class LMStudio:
             FileNotFoundError if pdf_path does not exist
             LMStudioError     if the PDF has no text layer, the server errors,
                               or a "json"/"csv" reply cannot be parsed
+            PdfReadError      (from PyPDF2) if pdf_path is not a readable PDF
 
         POST /v1/chat/completions  (via self.chat)
         """

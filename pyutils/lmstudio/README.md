@@ -139,7 +139,7 @@ vec  = lm.embed("hello world")                  # list[float]
 vecs = lm.embed(["first", "second"])            # list[list[float]]
 ```
 
-#### `extract_from_pdf(pdf_path, instruction, model="default", output_format="json", temperature=0.0, max_tokens=-1) -> dict | list | str`
+#### `extract_from_pdf(pdf_path, instruction, model="default", output_format="json", temperature=0.0, max_tokens=-1) -> Any`
 
 Reads a PDF's text layer (via `scrape_pdf_content`), sends **all of it** plus
 `instruction` to the chat model in one `POST /v1/chat/completions` call, and
@@ -149,9 +149,9 @@ raised as `LMStudioError`.
 
 | `output_format` | Returns | Notes |
 | --- | --- | --- |
-| `"json"` | `dict` or `list` | `json.loads` of the reply; Markdown code fences are stripped first. Raises `LMStudioError` if the reply is not valid JSON. |
+| `"json"` | any JSON value (usually `dict`/`list`) | `json.loads` of the reply; Markdown code fences are stripped first. Raises `LMStudioError` if the reply is not valid JSON. |
 | `"txt"` | `str` | The reply, stripped. |
-| `"csv"` | `str` | The reply as CSV text (fences stripped, checked with `csv.reader`). Raises `LMStudioError` on a hard parse error or an empty reply. |
+| `"csv"` | `str` | The reply as CSV text (fences stripped, checked with `csv.reader(strict=True)`). Raises `LMStudioError` on a hard parse error or an empty reply. |
 
 `temperature` defaults to `0.0` for repeatable extraction.
 
@@ -167,7 +167,7 @@ data = lm.extract_from_pdf(
 
 Raises: `ValueError` (bad `output_format`), `FileNotFoundError` (missing PDF),
 `LMStudioError` (no text layer, server/model error, unparseable `json`/`csv`
-reply).
+reply). A malformed / non-PDF file raises PyPDF2's own `PdfReadError`.
 
 ### Stateful chat (native)
 
