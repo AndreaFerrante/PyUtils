@@ -151,3 +151,38 @@ def test_invalid_json_reply_raises_lmstudioerror(monkeypatch, pdf_path):
     lm = make_client(monkeypatch, "here is your answer: none")
     with pytest.raises(LMStudioError):
         lm.extract_from_pdf(pdf_path, "x", output_format="json")
+
+
+def test_csv_reply_returned_as_string(monkeypatch, pdf_path):
+    lm = make_client(monkeypatch, "name,amount\nwidget,10\ngadget,20")
+    out = lm.extract_from_pdf(pdf_path, "x", output_format="csv")
+    assert out == "name,amount\nwidget,10\ngadget,20"
+    assert isinstance(out, str)
+
+
+def test_csv_reply_wrapped_in_fence_stripped(monkeypatch, pdf_path):
+    lm = make_client(monkeypatch, "```csv\nname,amount\nwidget,10\n```")
+    assert (
+        lm.extract_from_pdf(pdf_path, "x", output_format="csv")
+        == "name,amount\nwidget,10"
+    )
+
+
+def test_csv_branch_uses_csv_system_prompt(monkeypatch, pdf_path):
+    sink = {}
+    lm = make_client(monkeypatch, "a,b\n1,2", sink)
+    lm.extract_from_pdf(pdf_path, "x", output_format="csv")
+    assert "CSV" in sink["prompt"][0]["content"]
+
+
+def test_unparseable_csv_reply_raises_lmstudioerror(monkeypatch, pdf_path):
+    # Unterminated quoted field running to EOF -> csv.Error (strict reader).
+    lm = make_client(monkeypatch, '"unterminated field')
+    with pytest.raises(LMStudioError):
+        lm.extract_from_pdf(pdf_path, "x", output_format="csv")
+
+
+def test_empty_csv_reply_raises_lmstudioerror(monkeypatch, pdf_path):
+    lm = make_client(monkeypatch, "   ")
+    with pytest.raises(LMStudioError):
+        lm.extract_from_pdf(pdf_path, "x", output_format="csv")

@@ -328,9 +328,22 @@ class LMStudio:
                     f"Model reply is not valid JSON: {cleaned[:300]!r}"
                 ) from exc
 
-        raise LMStudioError(
-            f"output_format={output_format!r} handling not yet implemented"
-        )
+        # output_format == "csv"
+        stripped = cleaned.strip()
+        try:
+            # ponytail: strict=True is the only mode that rejects malformed CSV
+            # (unterminated quotes); it still only catches hard parse errors,
+            # not structural nonsense like ragged rows.
+            rows = list(csv.reader(stripped.splitlines(), strict=True))
+        except csv.Error as exc:
+            raise LMStudioError(
+                f"Model reply is not valid CSV: {stripped[:300]!r}"
+            ) from exc
+        if not rows:
+            raise LMStudioError(
+                f"Model returned an empty CSV reply: {reply[:300]!r}"
+            )
+        return stripped
 
     # ------------------------------------------------------------------ #
     # Native stateful chat  (/api/v1/chat)                               #
