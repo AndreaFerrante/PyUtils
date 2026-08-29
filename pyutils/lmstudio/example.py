@@ -95,6 +95,24 @@ def example_vision(lm: LMStudio) -> None:
     print(answer)
 
 
+def example_extract_pdf(lm: LMStudio) -> None:
+    """Extract structured fields from a throwaway PDF built on the spot."""
+    from pyutils.service_factory.pdf import pdf_generator_from_text
+
+    tmp_pdf = "example_invoice.pdf"
+    pdf_generator_from_text(
+        tmp_pdf,
+        "Invoice INV-2025-001 Total EUR 1240.50 Due 2025-12-31",
+    )
+    data = lm.extract_from_pdf(
+        tmp_pdf,
+        "Extract invoice_number, total, currency, due_date.",
+        model=MODEL,
+        output_format="json",
+    )
+    print(data)
+
+
 # --------------------------------------------------------------------------- #
 # Stateful chat (native /api/v1/chat)                                          #
 # --------------------------------------------------------------------------- #
@@ -167,6 +185,7 @@ def main() -> None:
     run("embed() — single", lambda: example_embed_single(lm))
     run("embed() — batch", lambda: example_embed_batch(lm))
     run("chat_with_image()", lambda: example_vision(lm))
+    run("extract_from_pdf()", lambda: example_extract_pdf(lm))
     run("chat_stateful()", lambda: example_stateful(lm))
 
     # Mutating / heavy — opt in
