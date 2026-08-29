@@ -103,3 +103,51 @@ def test_model_and_max_tokens_pass_through(monkeypatch, pdf_path):
     )
     assert sink["model"] == "my-model"
     assert sink["max_tokens"] == 256
+
+
+from pyutils.lmstudio.lmstudio import _strip_code_fence
+
+
+def test_strip_code_fence_passes_through_plain_text():
+    assert _strip_code_fence('  {"a": 1}  ') == '{"a": 1}'
+
+
+def test_strip_code_fence_removes_bare_fence():
+    assert _strip_code_fence("```\n{\"a\": 1}\n```") == '{"a": 1}'
+
+
+def test_strip_code_fence_removes_language_tagged_fence():
+    assert _strip_code_fence("```json\n{\"a\": 1}\n```") == '{"a": 1}'
+
+
+def test_strip_code_fence_leaves_unterminated_fence_alone():
+    # No closing fence -> return as-is (json.loads will then reject it).
+    assert _strip_code_fence("```json\n{\"a\": 1}") == '```json\n{"a": 1}'
+
+
+def test_json_object_reply_parsed(monkeypatch, pdf_path):
+    lm = make_client(monkeypatch, '{"total": 42}')
+    assert lm.extract_from_pdf(pdf_path, "x", output_format="json") == {"total": 42}
+
+
+def test_json_list_reply_parsed(monkeypatch, pdf_path):
+    lm = make_client(monkeypatch, "[1, 2, 3]")
+    assert lm.extract_from_pdf(pdf_path, "x", output_format="json") == [1, 2, 3]
+
+
+def test_json_reply_wrapped_in_fence_parsed(monkeypatch, pdf_path):
+    lm = make_client(monkeypatch, '```json\n{"a": 1}\n```')
+    assert lm.extract_from_pdf(pdf_path, "x", output_format="json") == {"a": 1}
+
+
+def test_json_branch_uses_json_system_prompt(monkeypatch, pdf_path):
+    sink = {}
+    lm = make_client(monkeypatch, "{}", sink)
+    lm.extract_from_pdf(pdf_path, "x", output_format="json")
+    assert "JSON" in sink["prompt"][0]["content"]
+
+
+def test_invalid_json_reply_raises_lmstudioerror(monkeypatch, pdf_path):
+    lm = make_client(monkeypatch, "here is your answer: none")
+    with pytest.raises(LMStudioError):
+        lm.extract_from_pdf(pdf_path, "x", output_format="json")

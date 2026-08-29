@@ -44,6 +44,22 @@ _EXTRACT_SYSTEM_PROMPTS: dict[str, str] = {
 }
 
 
+def _strip_code_fence(reply: str) -> str:
+    """Return `reply` with a wrapping Markdown code fence removed, if present.
+
+    Small models often wrap structured output in ```json ... ``` despite being
+    told not to. Handles a bare ``` opener or a language-tagged one. If the text
+    is not a complete fenced block it is returned stripped but otherwise intact.
+    """
+    text = reply.strip()
+    if not text.startswith("```"):
+        return text
+    lines = text.splitlines()
+    if len(lines) >= 2 and lines[-1].strip() == "```":
+        return "\n".join(lines[1:-1]).strip()
+    return text
+
+
 class LMStudioError(RuntimeError):
     """Raised when LM Studio returns an error or is unreachable."""
 
@@ -301,6 +317,16 @@ class LMStudio:
 
         if output_format == "txt":
             return reply.strip()
+
+        cleaned = _strip_code_fence(reply)
+
+        if output_format == "json":
+            try:
+                return json.loads(cleaned)
+            except json.JSONDecodeError as exc:
+                raise LMStudioError(
+                    f"Model reply is not valid JSON: {cleaned[:300]!r}"
+                ) from exc
 
         raise LMStudioError(
             f"output_format={output_format!r} handling not yet implemented"
