@@ -233,9 +233,9 @@ Requires LM Studio's local server to be running, by default at `localhost:1234`.
 ```python
 from pyutils.lmstudio import LMStudio
 
-client = LMStudio()
-answer = client.chat("Explain VWAP in one sentence.", model="default")
-embeddings = client.embed("VWAP")
+client = LMStudio(model="qwen2.5-7b-instruct")   # default model for every call
+answer = client.chat("Explain VWAP in one sentence.")
+embeddings = client.embed("VWAP", model="text-embedding-model")  # override per call
 ```
 
 Pull structured data straight out of a PDF with `extract_from_pdf` — the whole

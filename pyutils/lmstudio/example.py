@@ -168,7 +168,7 @@ def example_download(lm: LMStudio) -> None:
 # Main                                                                         #
 # --------------------------------------------------------------------------- #
 def main() -> None:
-    lm = LMStudio(host=HOST, api_token=API_TOKEN)
+    lm = LMStudio(host=HOST, api_token=API_TOKEN, model=MODEL)  # default model for every call
 
     print("=" * 70)
     print("LM STUDIO CLIENT — EXAMPLES")

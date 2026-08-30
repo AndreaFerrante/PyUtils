@@ -63,9 +63,11 @@ If auth is OFF, omit the token entirely — the client simply won't send the hea
 ```python
 from lmstudio import LMStudio
 
-lm = LMStudio()  # host="localhost:1234", token from LM_API_TOKEN if present
+# set the model once — every inference call uses it
+lm = LMStudio(model="qwen2.5-7b-instruct")  # host="localhost:1234", token from LM_API_TOKEN
 
-print(lm.chat("In one sentence, what is LM Studio?", model="qwen2.5-7b-instruct"))
+print(lm.chat("In one sentence, what is LM Studio?"))
+print(lm.chat("And in French?", model="some-other-model"))   # override per call
 ```
 
 Don't know your model id? List them:
@@ -82,17 +84,23 @@ for m in lm.list_models()["data"]:
 Construction:
 
 ```python
-LMStudio(host="localhost:1234", api_token=None, timeout=120.0)
+LMStudio(host="localhost:1234", api_token=None, timeout=120.0, model="default")
 ```
 
+`model` is the default model for every inference call (`chat`, `chat_with_image`,
+`chat_stream`, `complete`, `embed`, `chat_stateful`, `extract_from_pdf`). Set it
+once on the client; any method still accepts its own `model=` to override it for
+that one call. It defaults to `"default"` (LM Studio uses whatever is loaded).
+Model-management calls (`load_model`, `unload_model`, `download_model`) are
+unaffected — their argument is the model to act on, not to run.
+
 All methods raise `LMStudioError` on a transport failure or a server error (the
-exception message carries the server's own error text). Every method takes a
-`model` argument that defaults to `"default"`; pass an explicit id from
+exception message carries the server's own error text). Pass an explicit id from
 `list_models()` for predictable behavior.
 
 ### Inference (OpenAI-compatible)
 
-#### `chat(prompt, model="default", temperature=0.7, max_tokens=-1) -> str`
+#### `chat(prompt, model=None, temperature=0.7, max_tokens=-1) -> str`
 `POST /v1/chat/completions`. `prompt` is either a string (one user turn) or a full
 OpenAI-style messages list.
 
@@ -104,7 +112,7 @@ lm.chat([
 ])
 ```
 
-#### `chat_with_image(prompt, image, model="default", temperature=0.7) -> str`
+#### `chat_with_image(prompt, image, model=None, temperature=0.7) -> str`
 `POST /v1/chat/completions` with image content blocks. Requires a vision model
 (VLM) loaded. `image` may be a **local file path**, an **http(s) URL**, or a
 **`data:` URI**; local files are base64-encoded automatically.
@@ -114,7 +122,7 @@ lm.chat_with_image("What's in this?", "/path/photo.jpg", model="qwen2-vl-7b-inst
 lm.chat_with_image("Describe it", "https://example.com/cat.jpg", model="qwen2-vl-7b-instruct")
 ```
 
-#### `chat_stream(prompt, model="default", temperature=0.7) -> Iterator[str]`
+#### `chat_stream(prompt, model=None, temperature=0.7) -> Iterator[str]`
 `POST /v1/chat/completions` with `stream=True`. Yields text fragments as they
 arrive.
 
@@ -123,14 +131,14 @@ for chunk in lm.chat_stream("Count to five."):
     print(chunk, end="", flush=True)
 ```
 
-#### `complete(prompt, model="default", temperature=0.7, max_tokens=100) -> str`
+#### `complete(prompt, model=None, temperature=0.7, max_tokens=100) -> str`
 `POST /v1/completions`. Raw (non-chat) text completion.
 
 ```python
 lm.complete("The capital of Italy is", max_tokens=16)
 ```
 
-#### `embed(text, model="default") -> list[float] | list[list[float]]`
+#### `embed(text, model=None) -> list[float] | list[list[float]]`
 `POST /v1/embeddings`. Requires an embedding model. A **string** input returns a
 single vector; a **list** input returns a list of vectors in the same order.
 
@@ -139,7 +147,7 @@ vec  = lm.embed("hello world")                  # list[float]
 vecs = lm.embed(["first", "second"])            # list[list[float]]
 ```
 
-#### `extract_from_pdf(pdf_path, instruction, model="default", output_format="json", temperature=0.0, max_tokens=-1) -> Any`
+#### `extract_from_pdf(pdf_path, instruction, model=None, output_format="json", temperature=0.0, max_tokens=-1) -> Any`
 
 Reads a PDF's text layer (via `scrape_pdf_content`), sends **all of it** plus
 `instruction` to the chat model in one `POST /v1/chat/completions` call, and
@@ -238,7 +246,7 @@ Notes:
 
 ### Stateful chat (native)
 
-#### `chat_stateful(text, model="default", previous_response_id=None) -> tuple[str, str]`
+#### `chat_stateful(text, model=None, previous_response_id=None) -> tuple[str, str]`
 `POST /api/v1/chat`. The server retains conversation history. Returns
 `(reply_text, response_id)`; pass the id back as `previous_response_id` to
 continue.
@@ -337,8 +345,10 @@ JSON error payloads. The message includes the HTTP status and the server's own
 - **JIT loading:** if "Just-In-Time model loading" is ON, an inference call for an
   unloaded model will load it on demand (subject to TTL / Auto-Evict). With it OFF,
   load the model first.
-- **`model="default"`** is a convenience fallback; for deterministic behavior pass
-  an explicit id from `list_models()`.
+- **Model resolution:** a method's `model=` wins; otherwise the client's
+  `model` (from the constructor, or reassigned later via `lm.model = "..."`)
+  is used; that defaults to `"default"`, which lets LM Studio pick whatever is
+  loaded. For deterministic behavior set an explicit id from `list_models()`.
 
 ---
 

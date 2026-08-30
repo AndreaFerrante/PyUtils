@@ -11,6 +11,10 @@ Two endpoint families, per the official docs:
 Auth: LM Studio only needs a token if "Require Authentication" is ON.
       Pass it once to the constructor (or set LM_API_TOKEN) and every call uses it.
 
+Model: pass `model=` to the constructor to set the default model for every
+       inference call (chat, complete, embed, extract_from_pdf, ...). Any method
+       still accepts its own `model=` to override it for that one call.
+
 Docs: https://lmstudio.ai/docs/developer/rest
 """
 
@@ -75,13 +79,19 @@ class LMStudio:
         host: str = "localhost:1234",
         api_token: str | None = None,
         timeout: float = 120.0,
+        model: str = "default",
     ) -> None:
         self.host = host
         self.token = api_token or os.getenv("LM_API_TOKEN")
         self.timeout = timeout
+        self.model = model                        # default model for every inference call
         self._openai = f"http://{host}/v1"        # inference
         self._native = f"http://{host}/api/v1"    # management
         self._session = requests.Session()
+
+    def _model(self, model: str | None) -> str:
+        """Resolve the model for a call: the explicit argument, else `self.model`."""
+        return model if model is not None else self.model
 
     # ------------------------------------------------------------------ #
     # Internal request helper (one place for headers + error handling)   #
@@ -145,19 +155,19 @@ class LMStudio:
     def chat(
         self,
         prompt: str | list[dict[str, Any]],
-        model: str = "default",
+        model: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = -1,
     ) -> str:
         """
         Chat completion. `prompt` may be a string (treated as one user turn)
-        or a full OpenAI-style messages list.
+        or a full OpenAI-style messages list. `model` defaults to `self.model`.
 
         POST /v1/chat/completions
         """
         messages = prompt if isinstance(prompt, list) else [{"role": "user", "content": prompt}]
         body = {
-            "model": model,
+            "model": self._model(model),
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -170,12 +180,13 @@ class LMStudio:
         self,
         prompt: str,
         image: str,
-        model: str = "default",
+        model: str | None = None,
         temperature: float = 0.7,
     ) -> str:
         """
         Vision chat. `image` may be a local file path, an http(s) URL, or a
         data: URI. Requires a VLM (e.g. qwen2-vl) loaded in LM Studio.
+        `model` defaults to `self.model`.
 
         POST /v1/chat/completions  (content blocks with image_url)
         """
@@ -184,7 +195,7 @@ class LMStudio:
             {"type": "image_url", "image_url": {"url": self._image_to_url(image)}},
         ]
         body = {
-            "model": model,
+            "model": self._model(model),
             "messages": [{"role": "user", "content": content}],
             "temperature": temperature,
             "stream": False,
@@ -195,17 +206,17 @@ class LMStudio:
     def complete(
         self,
         prompt: str,
-        model: str = "default",
+        model: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 100,
     ) -> str:
         """
-        Text completion (non-chat).
+        Text completion (non-chat). `model` defaults to `self.model`.
 
         POST /v1/completions
         """
         body = {
-            "model": model,
+            "model": self._model(model),
             "prompt": prompt,
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -217,15 +228,17 @@ class LMStudio:
     def embed(
         self,
         text: str | list[str],
-        model: str = "default",
+        model: str | None = None,
     ) -> list[float] | list[list[float]]:
         """
         Generate embeddings. Returns a single vector for a string input,
         or a list of vectors for a list input. Requires an embedding model.
+        `model` defaults to `self.model` (set an embedding model on the client,
+        or pass one here).
 
         POST /v1/embeddings
         """
-        body = {"model": model, "input": text}
+        body = {"model": self._model(model), "input": text}
         data = self._request("POST", f"{self._openai}/embeddings", body)
         vectors = [item["embedding"] for item in data["data"]]
         return vectors[0] if isinstance(text, str) else vectors
@@ -233,11 +246,12 @@ class LMStudio:
     def chat_stream(
         self,
         prompt: str | list[dict[str, Any]],
-        model: str = "default",
+        model: str | None = None,
         temperature: float = 0.7,
     ):
         """
         Streaming chat. Yields text fragments as they arrive (SSE).
+        `model` defaults to `self.model`.
 
         POST /v1/chat/completions  (stream=True)
         """
@@ -245,7 +259,7 @@ class LMStudio:
 
         messages = prompt if isinstance(prompt, list) else [{"role": "user", "content": prompt}]
         body = {
-            "model": model,
+            "model": self._model(model),
             "messages": messages,
             "temperature": temperature,
             "stream": True,
@@ -269,13 +283,14 @@ class LMStudio:
         self,
         pdf_path: str,
         instruction: str,
-        model: str = "default",
+        model: str | None = None,
         output_format: str = "json",
         temperature: float = 0.0,
         max_tokens: int = -1,
     ) -> Any:
         """
-        Extract information from a PDF with a local LLM.
+        Extract information from a PDF with a local LLM. `model` defaults to
+        `self.model`.
 
         The PDF's entire text layer is sent to the chat model in one request,
         prefixed by `instruction`. No retrieval or chunking is performed; if the
@@ -358,18 +373,19 @@ class LMStudio:
     def chat_stateful(
         self,
         text: str,
-        model: str = "default",
+        model: str | None = None,
         previous_response_id: str | None = None,
     ) -> tuple[str, str]:
         """
         Stateful chat: the server keeps history. Pass back the returned
         response_id as `previous_response_id` to continue the conversation.
+        `model` defaults to `self.model`.
 
         Returns (reply_text, response_id).
 
         POST /api/v1/chat
         """
-        body: dict[str, Any] = {"model": model, "input": text}
+        body: dict[str, Any] = {"model": self._model(model), "input": text}
         if previous_response_id:
             body["previous_response_id"] = previous_response_id
 
