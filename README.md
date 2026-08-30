@@ -238,7 +238,20 @@ answer = client.chat("Explain VWAP in one sentence.", model="default")
 embeddings = client.embed("VWAP")
 ```
 
-The client also supports streaming, vision, stateful chat, PDF extraction, and model management. Set `LM_API_TOKEN` when LM Studio authentication is enabled.
+Pull structured data straight out of a PDF with `extract_from_pdf` — the whole
+text layer plus your instruction go to the loaded model in one call:
+
+```python
+invoice = client.extract_from_pdf(
+    'invoice.pdf',
+    'Extract invoice_number, total, currency, and due_date.',
+    output_format='json',   # or 'txt' / 'csv'
+)
+```
+
+The client also supports streaming, vision, stateful chat, and model management. Set `LM_API_TOKEN` when LM Studio authentication is enabled.
+
+See [`pyutils/lmstudio/README.md`](pyutils/lmstudio/README.md) for the full API and a folder-of-PDFs → single-CSV pipeline example.
 
 ---
 
