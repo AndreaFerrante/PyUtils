@@ -238,7 +238,7 @@ answer = client.chat("Explain VWAP in one sentence.", model="default")
 embeddings = client.embed("VWAP")
 ```
 
-The client also supports streaming, vision, stateful chat, and model management. Set `LM_API_TOKEN` when LM Studio authentication is enabled.
+The client also supports streaming, vision, stateful chat, PDF extraction, and model management. Set `LM_API_TOKEN` when LM Studio authentication is enabled.
 
 ---
 

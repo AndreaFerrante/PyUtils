@@ -17,10 +17,50 @@ Docs: https://lmstudio.ai/docs/developer/rest
 from __future__ import annotations
 
 import base64
+import csv
+import json
 import os
 from typing import Any
 
 import requests
+
+
+_EXTRACT_SYSTEM_PROMPTS: dict[str, str] = {
+    "json": (
+        "You extract information from documents. "
+        "Reply with only a single valid JSON value and nothing else. "
+        "No prose, no explanation, no Markdown code fences."
+    ),
+    "txt": (
+        "You extract information from documents. "
+        "Reply with only the extracted information as plain text. "
+        "No prose framing, no Markdown code fences."
+    ),
+    "csv": (
+        "You extract information from documents. "
+        "Reply with only CSV: a header row followed by data rows. "
+        "No prose, no explanation, no Markdown code fences."
+    ),
+}
+
+
+def _strip_code_fence(reply: str) -> str:
+    """Return `reply` with a wrapping Markdown code fence removed, if present.
+
+    Small models often wrap structured output in ```json ... ``` despite being
+    told not to. Handles a bare ``` opener or a language-tagged one. If the text
+    is not a complete fenced block it is returned stripped but otherwise intact.
+
+    A reply with prose after the closing fence, or a one-line fence, is NOT
+    unwrapped — it falls through to the caller's parser, which then fails loudly.
+    """
+    text = reply.strip()
+    if not text.startswith("```"):
+        return text
+    lines = text.splitlines()
+    if len(lines) >= 2 and lines[-1].strip() == "```":
+        return "\n".join(lines[1:-1]).strip()
+    return text
 
 
 class LMStudioError(RuntimeError):
@@ -224,6 +264,92 @@ class LMStudio:
             delta = chunk["choices"][0]["delta"].get("content")
             if delta:
                 yield delta
+
+    def extract_from_pdf(
+        self,
+        pdf_path: str,
+        instruction: str,
+        model: str = "default",
+        output_format: str = "json",
+        temperature: float = 0.0,
+        max_tokens: int = -1,
+    ) -> Any:
+        """
+        Extract information from a PDF with a local LLM.
+
+        The PDF's entire text layer is sent to the chat model in one request,
+        prefixed by `instruction`. No retrieval or chunking is performed; if the
+        text exceeds the model's context window LM Studio errors and that is
+        raised as LMStudioError.
+
+        output_format:
+            "json" -> reply parsed with json.loads; returns any JSON value
+                      (usually a dict or list, but a bare string/number/bool/
+                      null is returned as-is)
+            "txt"  -> reply returned as a stripped str
+            "csv"  -> reply returned as a CSV str (checked as parseable)
+
+        Raises:
+            ValueError        if output_format is not "json" / "txt" / "csv"
+            FileNotFoundError if pdf_path does not exist
+            LMStudioError     if the PDF has no text layer, the server errors,
+                              or a "json"/"csv" reply cannot be parsed
+            PdfReadError      (from PyPDF2) if pdf_path is not a readable PDF
+
+        POST /v1/chat/completions  (via self.chat)
+        """
+        if output_format not in _EXTRACT_SYSTEM_PROMPTS:
+            raise ValueError(
+                f"output_format must be one of {sorted(_EXTRACT_SYSTEM_PROMPTS)}, "
+                f"got {output_format!r}"
+            )
+
+        from pyutils.service_factory.pdf import scrape_pdf_content
+
+        text = scrape_pdf_content(pdf_path)
+        if not text.strip():
+            raise LMStudioError(
+                f"PDF has no extractable text: {pdf_path}. "
+                f"It may be scanned images that require OCR."
+            )
+
+        messages = [
+            {"role": "system", "content": _EXTRACT_SYSTEM_PROMPTS[output_format]},
+            {"role": "user", "content": f"{instruction}\n\nDocument:\n{text}"},
+        ]
+        reply = self.chat(
+            messages, model=model, temperature=temperature, max_tokens=max_tokens
+        )
+
+        if output_format == "txt":
+            return reply.strip()
+
+        cleaned = _strip_code_fence(reply)
+
+        if output_format == "json":
+            try:
+                return json.loads(cleaned)
+            except json.JSONDecodeError as exc:
+                raise LMStudioError(
+                    f"Model reply is not valid JSON: {cleaned[:300]!r}"
+                ) from exc
+
+        # output_format == "csv"
+        stripped = cleaned.strip()
+        try:
+            # ponytail: strict=True is the only mode that rejects malformed CSV
+            # (unterminated quotes); it still only catches hard parse errors,
+            # not structural nonsense like ragged rows.
+            rows = list(csv.reader(stripped.splitlines(), strict=True))
+        except csv.Error as exc:
+            raise LMStudioError(
+                f"Model reply is not valid CSV: {stripped[:300]!r}"
+            ) from exc
+        if not rows:
+            raise LMStudioError(
+                f"Model returned an empty CSV reply: {reply[:300]!r}"
+            )
+        return stripped
 
     # ------------------------------------------------------------------ #
     # Native stateful chat  (/api/v1/chat)                               #

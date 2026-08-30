@@ -139,6 +139,36 @@ vec  = lm.embed("hello world")                  # list[float]
 vecs = lm.embed(["first", "second"])            # list[list[float]]
 ```
 
+#### `extract_from_pdf(pdf_path, instruction, model="default", output_format="json", temperature=0.0, max_tokens=-1) -> Any`
+
+Reads a PDF's text layer (via `scrape_pdf_content`), sends **all of it** plus
+`instruction` to the chat model in one `POST /v1/chat/completions` call, and
+returns the reply shaped by `output_format`. No retrieval or chunking — if the
+document is larger than the model's context window, LM Studio errors and that is
+raised as `LMStudioError`.
+
+| `output_format` | Returns | Notes |
+| --- | --- | --- |
+| `"json"` | any JSON value (usually `dict`/`list`) | `json.loads` of the reply; Markdown code fences are stripped first. Raises `LMStudioError` if the reply is not valid JSON. |
+| `"txt"` | `str` | The reply, stripped. |
+| `"csv"` | `str` | The reply as CSV text (fences stripped, checked with `csv.reader(strict=True)`). Raises `LMStudioError` on a hard parse error or an empty reply. |
+
+`temperature` defaults to `0.0` for repeatable extraction.
+
+```python
+data = lm.extract_from_pdf(
+    "invoice.pdf",
+    "Extract invoice_number, total, currency, and due_date.",
+    model="qwen2.5-7b-instruct",
+    output_format="json",
+)
+# {'invoice_number': 'INV-2025-001', 'total': 1240.5, 'currency': 'EUR', 'due_date': '2025-12-31'}
+```
+
+Raises: `ValueError` (bad `output_format`), `FileNotFoundError` (missing PDF),
+`LMStudioError` (no text layer, server/model error, unparseable `json`/`csv`
+reply). A malformed / non-PDF file raises PyPDF2's own `PdfReadError`.
+
 ### Stateful chat (native)
 
 #### `chat_stateful(text, model="default", previous_response_id=None) -> tuple[str, str]`
@@ -199,6 +229,7 @@ print(lm.download_status(job["job_id"]))
 | `chat`, `chat_with_image`, `chat_stream` | POST | `/v1/chat/completions` |
 | `complete` | POST | `/v1/completions` |
 | `embed` | POST | `/v1/embeddings` |
+| `extract_from_pdf` | POST | `/v1/chat/completions` |
 | `chat_stateful` | POST | `/api/v1/chat` |
 | `list_models`, `loaded_instances` | GET | `/api/v1/models` |
 | `load_model` | POST | `/api/v1/models/load` |
