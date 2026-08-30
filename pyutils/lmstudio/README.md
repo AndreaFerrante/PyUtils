@@ -169,6 +169,73 @@ Raises: `ValueError` (bad `output_format`), `FileNotFoundError` (missing PDF),
 `LMStudioError` (no text layer, server/model error, unparseable `json`/`csv`
 reply). A malformed / non-PDF file raises PyPDF2's own `PdfReadError`.
 
+#### Pipeline: a folder of PDFs → one CSV
+
+There is no dedicated pipeline object — a batch run is a plain loop over
+`extract_from_pdf(..., output_format="csv")`, and `pandas` (already a dependency)
+merges the per-PDF tables and writes the final CSV.
+
+This example walks every PDF in `statements/`, asks the loaded LLM to pull each
+transaction as a CSV row, tags each row with its source file, stacks them into
+one table, and saves `transactions.csv`:
+
+```python
+import os
+from io import StringIO
+
+import pandas as pd
+
+from pyutils.lmstudio import LMStudio, LMStudioError
+
+FOLDER = "statements"
+lm = LMStudio()  # host="localhost:1234"; token from LM_API_TOKEN if set
+
+INSTRUCTION = (
+    "Extract every transaction in this bank statement. "
+    "Return one row per transaction with exactly these columns: "
+    "date, description, amount."
+)
+
+frames = []
+for name in sorted(os.listdir(FOLDER)):
+    if not name.lower().endswith(".pdf"):
+        continue
+
+    try:
+        csv_text = lm.extract_from_pdf(
+            os.path.join(FOLDER, name),
+            INSTRUCTION,
+            model="qwen2.5-7b-instruct",   # any chat model you have loaded
+            output_format="csv",
+        )
+    except LMStudioError as exc:          # no text layer, bad CSV, server error…
+        print(f"skipped {name}: {exc}")
+        continue
+
+    df = pd.read_csv(StringIO(csv_text))
+    df.insert(0, "source_pdf", name)      # column 0: just the PDF file name
+    frames.append(df)
+
+if not frames:
+    raise SystemExit(f"no transactions extracted from {FOLDER}/*.pdf")
+
+all_transactions = pd.concat(frames, ignore_index=True)
+all_transactions.to_csv("transactions.csv", index=False)
+print(f"{len(all_transactions)} transactions from {len(frames)} PDFs -> transactions.csv")
+```
+
+Notes:
+
+- **One LLM call per PDF.** Each PDF's full text must fit the model's context
+  window (no chunking); an over-long PDF raises `LMStudioError` and the loop
+  skips it.
+- **`pd.concat` aligns by column name.** If one statement's CSV is missing a
+  column another has, the rows still stack and the gaps become `NaN` — no crash.
+- **The LLM decides the format.** Pin the columns in `INSTRUCTION`, run once, and
+  eyeball `transactions.csv` before trusting it. Lower `temperature` is already
+  the default (`0.0`).
+- **Scanned PDFs won't work** — `extract_from_pdf` needs a real text layer.
+
 ### Stateful chat (native)
 
 #### `chat_stateful(text, model="default", previous_response_id=None) -> tuple[str, str]`
