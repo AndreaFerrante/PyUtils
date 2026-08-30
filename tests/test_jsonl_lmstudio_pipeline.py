@@ -5,7 +5,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from PyUtils.pyutils.embedders.example_pipeline import run_pipeline
+from pyutils.embedders.example_pipeline import run_pipeline
 
 
 class FakeLMStudio:

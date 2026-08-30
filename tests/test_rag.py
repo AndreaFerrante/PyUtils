@@ -289,7 +289,7 @@ def test_injected_store_is_retained():
     pipeline must keep an injected store with `is not None`, not `or` (which
     would silently fall back to the default flat store).
     """
-    from rag import RAGPipeline
+    from pyutils.embedders.rag import RAGPipeline
     store = FAISSStore(dim=_StubEmbedder.dim, index_type="hnsw")
     rag = RAGPipeline(embedder=_StubEmbedder(), store=store)
     assert rag.store is store

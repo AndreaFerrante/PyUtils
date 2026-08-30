@@ -23,11 +23,22 @@ Quick-start:
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import Dict, List
 
-import faiss
-import numpy as np
+# faiss and torch (torch arrives via .embedder) each bundle their own OpenMP
+# runtime. On macOS that duplicate aborts with "OMP: Error #15" and then
+# segfaults inside faiss's multi-threaded k-means during index training. Allow
+# the duplicate runtime and pin faiss to one thread — both are needed.
+# ponytail: single-threaded faiss index builds; remove if the environment ever
+# provides a single shared OpenMP (e.g. conda-forge faiss + torch on llvm-openmp).
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+
+import faiss  # noqa: E402  (must follow the KMP_DUPLICATE_LIB_OK guard above)
+import numpy as np  # noqa: E402
+
+faiss.omp_set_num_threads(1)
 
 from .embedder import QwenEmbedder
 

@@ -100,7 +100,7 @@ def test_empty_document_uses_selected_model_dimension():
 
 def test_example_uses_automatic_device_selection():
     """The runnable example must not force the CUDA-only device."""
-    example = Path(__file__).parents[1] / "pyutils" / "embedders" / "example.py"
+    example = Path(__file__).parents[1] / "pyutils" / "embedders" / "example_embedders.py"
     tree = ast.parse(example.read_text())
     embedder_calls = [
         node
