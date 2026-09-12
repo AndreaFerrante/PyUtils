@@ -26,7 +26,7 @@ def scrape_pdf_content(pdf_path: str) -> str:
         raise FileNotFoundError(f"PDF file not found: {pdf_path}")
 
 
-def pdf_pages_to_images(pdf_path: str, output_dir: str, dpi: int = 200) -> list[str]:
+def pdf_pages_to_images(pdf_path: str, output_dir: str, dpi: int = 480) -> list[str]:
     """Render each PDF page to a PNG in output_dir, return the output paths in page order.
 
     Raises:
@@ -36,7 +36,7 @@ def pdf_pages_to_images(pdf_path: str, output_dir: str, dpi: int = 200) -> list[
         raise FileNotFoundError(f"PDF file not found: {pdf_path}")
 
     os.makedirs(output_dir, exist_ok=True)
-    zoom = dpi / 72  # ponytail: fixed zoom-from-dpi math, revisit if non-square scaling ever needed
+    zoom = dpi / 72
     matrix = fitz.Matrix(zoom, zoom)
 
     paths = []
