@@ -1,6 +1,6 @@
 import os
 
-import fitz  # PyMuPDF
+import pymupdf as fitz
 import PyPDF2
 from reportlab.pdfgen import canvas
 
