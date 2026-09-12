@@ -78,7 +78,7 @@ class LMStudio:
         self,
         host: str = "localhost:1234",
         api_token: str | None = None,
-        timeout: float = 120.0,
+        timeout: float = 3600,
         model: str = "default",
     ) -> None:
         self.host = host
