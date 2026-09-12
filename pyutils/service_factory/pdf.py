@@ -1,3 +1,6 @@
+import os
+
+import fitz  # PyMuPDF
 import PyPDF2
 from reportlab.pdfgen import canvas
 
@@ -21,3 +24,25 @@ def scrape_pdf_content(pdf_path: str) -> str:
             return "".join(page.extract_text() or "" for page in reader.pages)
     except FileNotFoundError:
         raise FileNotFoundError(f"PDF file not found: {pdf_path}")
+
+
+def pdf_pages_to_images(pdf_path: str, output_dir: str, dpi: int = 200) -> list[str]:
+    """Render each PDF page to a PNG in output_dir, return the output paths in page order.
+
+    Raises:
+        FileNotFoundError: If pdf_path does not exist.
+    """
+    if not os.path.exists(pdf_path):
+        raise FileNotFoundError(f"PDF file not found: {pdf_path}")
+
+    os.makedirs(output_dir, exist_ok=True)
+    zoom = dpi / 72  # ponytail: fixed zoom-from-dpi math, revisit if non-square scaling ever needed
+    matrix = fitz.Matrix(zoom, zoom)
+
+    paths = []
+    with fitz.open(pdf_path) as doc:
+        for i, page in enumerate(doc):
+            out_path = os.path.join(output_dir, f"page_{i + 1}.png")
+            page.get_pixmap(matrix=matrix).save(out_path)
+            paths.append(out_path)
+    return paths

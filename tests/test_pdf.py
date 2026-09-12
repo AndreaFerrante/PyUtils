@@ -1,5 +1,7 @@
+import os
+
 import pytest
-from pyutils.service_factory.pdf import scrape_pdf_content, pdf_generator_from_text
+from pyutils.service_factory.pdf import scrape_pdf_content, pdf_generator_from_text, pdf_pages_to_images
 
 
 def test_scrape_pdf_content_returns_text(temp_pdf):
@@ -18,6 +20,17 @@ def test_scrape_pdf_content_missing_file():
 def test_pdf_generator_creates_file(tmp_path):
     output_path = str(tmp_path / "output.pdf")
     pdf_generator_from_text(output_path, "Test content")
-    import os
     assert os.path.exists(output_path)
     assert os.path.getsize(output_path) > 0
+
+
+def test_pdf_pages_to_images_one_page_pdf(temp_pdf, tmp_path):
+    out_dir = str(tmp_path / "pages")
+    paths = pdf_pages_to_images(temp_pdf, out_dir)
+    assert paths == [os.path.join(out_dir, "page_1.png")]
+    assert os.path.getsize(paths[0]) > 0
+
+
+def test_pdf_pages_to_images_missing_file(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        pdf_pages_to_images('/nonexistent/path/file.pdf', str(tmp_path))
