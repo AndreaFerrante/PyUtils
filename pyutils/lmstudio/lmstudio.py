@@ -86,8 +86,10 @@ class LMStudio:
         self.timeout = timeout
         self.model = model                        # default model for every inference call
         self._openai = f"http://{host}/v1"        # inference
+        self._v0 = f"http://{host}/api/v0"        # inference + perf stats (superset of /v1)
         self._native = f"http://{host}/api/v1"    # management
         self._session = requests.Session()
+        self.last_stats: dict[str, Any] = {}      # stats from the most recent chat/complete call
 
     def _model(self, model: str | None) -> str:
         """Resolve the model for a call: the explicit argument, else `self.model`."""
@@ -162,8 +164,10 @@ class LMStudio:
         """
         Chat completion. `prompt` may be a string (treated as one user turn)
         or a full OpenAI-style messages list. `model` defaults to `self.model`.
+        Sets `self.last_stats` (tokens_per_second, time_to_first_token,
+        generation_time, stop_reason) from this call.
 
-        POST /v1/chat/completions
+        POST /api/v0/chat/completions
         """
         messages = prompt if isinstance(prompt, list) else [{"role": "user", "content": prompt}]
         body = {
@@ -173,7 +177,8 @@ class LMStudio:
             "max_tokens": max_tokens,
             "stream": False,
         }
-        data = self._request("POST", f"{self._openai}/chat/completions", body)
+        data = self._request("POST", f"{self._v0}/chat/completions", body)
+        self.last_stats = data.get("stats", {})
         return data["choices"][0]["message"]["content"]
 
     def chat_with_image(
@@ -186,9 +191,9 @@ class LMStudio:
         """
         Vision chat. `image` may be a local file path, an http(s) URL, or a
         data: URI. Requires a VLM (e.g. qwen2-vl) loaded in LM Studio.
-        `model` defaults to `self.model`.
+        `model` defaults to `self.model`. Sets `self.last_stats` from this call.
 
-        POST /v1/chat/completions  (content blocks with image_url)
+        POST /api/v0/chat/completions  (content blocks with image_url)
         """
         content: list[dict[str, Any]] = [
             {"type": "text", "text": prompt},
@@ -200,7 +205,8 @@ class LMStudio:
             "temperature": temperature,
             "stream": False,
         }
-        data = self._request("POST", f"{self._openai}/chat/completions", body)
+        data = self._request("POST", f"{self._v0}/chat/completions", body)
+        self.last_stats = data.get("stats", {})
         return data["choices"][0]["message"]["content"]
 
     def complete(
@@ -212,8 +218,9 @@ class LMStudio:
     ) -> str:
         """
         Text completion (non-chat). `model` defaults to `self.model`.
+        Sets `self.last_stats` from this call.
 
-        POST /v1/completions
+        POST /api/v0/completions
         """
         body = {
             "model": self._model(model),
@@ -222,7 +229,8 @@ class LMStudio:
             "max_tokens": max_tokens,
             "stream": False,
         }
-        data = self._request("POST", f"{self._openai}/completions", body)
+        data = self._request("POST", f"{self._v0}/completions", body)
+        self.last_stats = data.get("stats", {})
         return data["choices"][0]["text"]
 
     def embed(
@@ -507,3 +515,5 @@ if __name__ == "__main__":
 
     print("\nChat:")
     print(lm.chat("In one sentence, what is LM Studio?"))
+    print(f"tokens/sec: {lm.last_stats.get('tokens_per_second')}")
+    assert "tokens_per_second" in lm.last_stats  # ponytail: smoke check, needs a live server

@@ -78,3 +78,28 @@ def test_embed_uses_instance_model():
     seen = _capture_body(lm, EMBED_OK)
     lm.embed(["a"])
     assert seen["body"]["model"] == "embed-model"
+
+
+def test_chat_hits_v0_endpoint_and_captures_stats():
+    lm = LMStudio()
+    stats = {"tokens_per_second": 42.0, "time_to_first_token": 0.1}
+    seen = _capture_body(lm, {**CHAT_OK, "stats": stats})
+    lm.chat("hi")
+    assert seen["url"] == f"http://{lm.host}/api/v0/chat/completions"
+    assert lm.last_stats == stats
+
+
+def test_complete_hits_v0_endpoint_and_captures_stats():
+    lm = LMStudio()
+    stats = {"tokens_per_second": 10.0}
+    seen = _capture_body(lm, {**COMPLETE_OK, "stats": stats})
+    lm.complete("hi")
+    assert seen["url"] == f"http://{lm.host}/api/v0/completions"
+    assert lm.last_stats == stats
+
+
+def test_last_stats_defaults_to_empty_dict_when_absent():
+    lm = LMStudio()
+    _capture_body(lm, CHAT_OK)
+    lm.chat("hi")
+    assert lm.last_stats == {}
