@@ -38,11 +38,12 @@ def pdf_pages_to_images(pdf_path: str, output_dir: str, dpi: int = 480) -> list[
     os.makedirs(output_dir, exist_ok=True)
     zoom = dpi / 72
     matrix = fitz.Matrix(zoom, zoom)
+    stem = os.path.splitext(os.path.basename(pdf_path))[0]
 
     paths = []
     with fitz.open(pdf_path) as doc:
         for i, page in enumerate(doc):
-            out_path = os.path.join(output_dir, f"page_{i + 1}.png")
+            out_path = os.path.join(output_dir, f"{stem}_page_{i + 1}.png")
             page.get_pixmap(matrix=matrix).save(out_path)
             paths.append(out_path)
     return paths

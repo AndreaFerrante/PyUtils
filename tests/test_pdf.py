@@ -27,7 +27,8 @@ def test_pdf_generator_creates_file(tmp_path):
 def test_pdf_pages_to_images_one_page_pdf(temp_pdf, tmp_path):
     out_dir = str(tmp_path / "pages")
     paths = pdf_pages_to_images(temp_pdf, out_dir)
-    assert paths == [os.path.join(out_dir, "page_1.png")]
+    stem = os.path.splitext(os.path.basename(temp_pdf))[0]
+    assert paths == [os.path.join(out_dir, f"{stem}_page_1.png")]
     assert os.path.getsize(paths[0]) > 0
 
 
