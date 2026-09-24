@@ -5,7 +5,6 @@ from pyutils.service_factory.pdf import scrape_pdf_content, pdf_generator_from_t
 
 
 def test_scrape_pdf_content_returns_text(temp_pdf):
-    # Bug: PdfFileReader removed in PyPDF2 4.x → AttributeError
     text = scrape_pdf_content(temp_pdf)
     assert isinstance(text, str)
     assert len(text) > 0

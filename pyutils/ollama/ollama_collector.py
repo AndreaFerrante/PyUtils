@@ -49,6 +49,33 @@ _OLLAMA_CLOUD_API = "https://ollama.com/api"
 # Web tools — standalone callables; injected via web_search=True
 # ----------------------------------------------------------------------
 
+def _cloud_post(endpoint: str, payload: Dict[str, Any], timeout: float) -> Union[Dict[str, Any], str]:
+    """POST to the Ollama cloud API. Returns parsed JSON, or an error string the model can read."""
+    api_key = os.environ.get("OLLAMA_API_KEY", "")
+    if not api_key:
+        return (
+            "Error: OLLAMA_API_KEY environment variable not set. "
+            "Get a free key at https://ollama.com/settings/keys"
+        )
+
+    label = endpoint.replace("_", " ").capitalize()   # "web_search" -> "Web search"
+    req = urllib.request.Request(
+        f"{_OLLAMA_CLOUD_API}/{endpoint}",
+        data=json.dumps(payload).encode(),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as ex:
+        return f"{label} failed (HTTP {ex.code}): {ex.reason}"
+    except Exception as ex:
+        return f"{label} failed: {ex}"
+
+
 def web_search(query: str, max_results: int = 5) -> str:
     """Search the internet for current information about a topic.
 
@@ -59,42 +86,17 @@ def web_search(query: str, max_results: int = 5) -> str:
     Returns:
         Formatted string with search results including titles, URLs, and snippets.
     """
-    api_key = os.environ.get("OLLAMA_API_KEY", "")
-    if not api_key:
-        return (
-            "Error: OLLAMA_API_KEY environment variable not set. "
-            "Get a free key at https://ollama.com/settings/keys"
-        )
-
-    payload = json.dumps({"query": query, "max_results": max_results}).encode()
-    req = urllib.request.Request(
-        f"{_OLLAMA_CLOUD_API}/web_search",
-        data=payload,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
-        },
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read())
-    except urllib.error.HTTPError as ex:
-        return f"Web search failed (HTTP {ex.code}): {ex.reason}"
-    except Exception as ex:
-        return f"Web search failed: {ex}"
+    data = _cloud_post("web_search", {"query": query, "max_results": max_results}, timeout=15)
+    if isinstance(data, str):
+        return data
 
     results = data.get("results", [])
     if not results:
         return "No results found."
-
-    lines = []
-    for i, r in enumerate(results, 1):
-        lines.append(
-            f"[{i}] {r.get('title', '')}\n"
-            f"{r.get('url', '')}\n"
-            f"{r.get('content', '')}"
-        )
-    return "\n\n".join(lines)
+    return "\n\n".join(
+        f"[{i}] {r.get('title', '')}\n{r.get('url', '')}\n{r.get('content', '')}"
+        for i, r in enumerate(results, 1)
+    )
 
 
 def web_fetch(url: str) -> str:
@@ -106,33 +108,10 @@ def web_fetch(url: str) -> str:
     Returns:
         Page title and main text content.
     """
-    api_key = os.environ.get("OLLAMA_API_KEY", "")
-    if not api_key:
-        return (
-            "Error: OLLAMA_API_KEY environment variable not set. "
-            "Get a free key at https://ollama.com/settings/keys"
-        )
-
-    payload = json.dumps({"url": url}).encode()
-    req = urllib.request.Request(
-        f"{_OLLAMA_CLOUD_API}/web_fetch",
-        data=payload,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
-        },
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            data = json.loads(resp.read())
-    except urllib.error.HTTPError as ex:
-        return f"Web fetch failed (HTTP {ex.code}): {ex.reason}"
-    except Exception as ex:
-        return f"Web fetch failed: {ex}"
-
-    title = data.get("title", "")
-    content = data.get("content", "")
-    return f"Title: {title}\n\n{content}"
+    data = _cloud_post("web_fetch", {"url": url}, timeout=20)
+    if isinstance(data, str):
+        return data
+    return f"Title: {data.get('title', '')}\n\n{data.get('content', '')}"
 
 
 class OllamaCollector:
@@ -168,7 +147,6 @@ class OllamaCollector:
         retry_max_delay:        float = 8.0,
         context_limit:          int   = 4096,
         context_warn_threshold: float = 0.8,
-        tool_concurrency:       int   = 0,
         on_tool_call:           Optional[Callable[[str, dict], None]] = None,
         on_tool_result:         Optional[Callable[[str, Any],  None]] = None,
         confirm_tool_call:      Optional[Callable[[str, dict], bool]] = None,
@@ -183,13 +161,9 @@ class OllamaCollector:
         self.retry_max_delay        = retry_max_delay
         self.context_limit          = context_limit
         self.context_warn_threshold = context_warn_threshold
-        self.tool_concurrency       = tool_concurrency
         self.on_tool_call           = on_tool_call
         self.on_tool_result         = on_tool_result
         self.confirm_tool_call      = confirm_tool_call
-        self._tool_semaphore: Optional[asyncio.Semaphore] = (
-            asyncio.Semaphore(tool_concurrency) if tool_concurrency > 0 else None
-        )
         self._client       = Client(host=self.host, timeout=self.timeout)
         self._async_client = AsyncClient(host=self.host, timeout=self.timeout)
 
@@ -260,6 +234,49 @@ class OllamaCollector:
                 "Consider trimming message history.",
                 stacklevel=3,
             )
+
+    def _prompt(self, query: str) -> List[Dict[str, Any]]:
+        """System prompt + one user turn."""
+        return [
+            {"role": "system", "content": self.content},
+            {"role": "user",   "content": query},
+        ]
+
+    def _kwargs(self, model: str, messages: List[Any], **optional: Any) -> Dict[str, Any]:
+        """chat() kwargs: model + messages, plus every optional arg that is not None."""
+        return {
+            "model":    model or self.model,
+            "messages": messages,
+            **{k: v for k, v in optional.items() if v is not None},
+        }
+
+    def _prepare_tool_call(
+        self,
+        tool_map:          Dict[str, Callable],
+        call:              Any,
+        confirm_tool_call: Optional[Callable[[str, dict], bool]],
+    ) -> tuple[Optional[Callable], str]:
+        """Validate, confirm and announce one tool call.
+
+        Returns (fn, "") when the tool should run, else (None, message for the model).
+        """
+        name, args = call.function.name, call.function.arguments
+        fn = tool_map.get(name)
+        if fn is None:
+            raise ValueError(f"Model called unknown tool: {name!r}")
+
+        try:
+            inspect.signature(fn).bind(**args)
+        except TypeError as exc:
+            return None, f"Error: invalid arguments for {name}: {exc}"
+
+        confirm = confirm_tool_call if confirm_tool_call is not None else self.confirm_tool_call
+        if confirm is not None and not confirm(name, args):
+            return None, "Tool execution declined."
+
+        if self.on_tool_call is not None:
+            self.on_tool_call(name, args)
+        return fn, ""
 
     # ------------------------------------------------------------------
     # Model management
@@ -371,16 +388,9 @@ class OllamaCollector:
                 options = options,
             )
 
-        kwargs: Dict[str, Any] = {
-            "model":    model or self.model,
-            "messages": [
-                {"role": "system", "content": self.content},
-                {"role": "user",   "content": query},
-            ],
-        }
-        if think   is not None: kwargs["think"]   = think
-        if options is not None: kwargs["options"] = options
-        response = self._chat_with_retry(**kwargs)
+        response = self._chat_with_retry(
+            **self._kwargs(model, self._prompt(query), think=think, options=options)
+        )
         self._check_context(response)
         if timer:
             secs = round(response.total_duration / 1e9, 3)
@@ -416,14 +426,9 @@ class OllamaCollector:
             [*self.WEB_TOOLS, *(tools or [])] if web_search else tools
         )
 
-        kwargs: Dict[str, Any] = {
-            "model":    model or self.model,
-            "messages": messages,
-        }
-        if effective_tools is not None: kwargs["tools"]   = effective_tools
-        if think           is not None: kwargs["think"]   = think
-        if format          is not None: kwargs["format"]  = format
-        if options         is not None: kwargs["options"] = options
+        kwargs = self._kwargs(
+            model, messages, tools=effective_tools, think=think, format=format, options=options,
+        )
         response = self._chat_with_retry(**kwargs)
         self._check_context(response)
         if effective_tools and response.message.tool_calls:
@@ -444,13 +449,7 @@ class OllamaCollector:
             for token in collector.stream_chat(messages):
                 print(token, end="", flush=True)
         """
-        kwargs: Dict[str, Any] = {
-            "model":    model or self.model,
-            "messages": messages,
-            "stream":   True,
-        }
-        if think   is not None: kwargs["think"]   = think
-        if options is not None: kwargs["options"] = options
+        kwargs = self._kwargs(model, messages, stream=True, think=think, options=options)
 
         for chunk in self._client.chat(**kwargs):
             content = chunk.message.content
@@ -491,19 +490,11 @@ class OllamaCollector:
         """
         effective_tools = [*self.WEB_TOOLS, *tools] if web_search else tools
         tool_map = {fn.__name__: fn for fn in effective_tools}
-        messages: List[Dict[str, Any]] = [
-            {"role": "system", "content": self.content},
-            {"role": "user",   "content": query},
-        ]
-        call_kwargs: Dict[str, Any] = {
-            "model": model or self.model,
-            "tools": effective_tools,
-        }
-        if think   is not None: call_kwargs["think"]   = think
-        if options is not None: call_kwargs["options"] = options
+        messages = self._prompt(query)
+        call_kwargs = self._kwargs(model, messages, tools=effective_tools, think=think, options=options)
 
         for _ in range(max_turns):
-            response = self._chat_with_retry(**call_kwargs, messages=messages)
+            response = self._chat_with_retry(**call_kwargs)
             self._check_context(response)
             messages.append(response.message)
 
@@ -512,38 +503,13 @@ class OllamaCollector:
 
             for call in response.message.tool_calls:
                 name = call.function.name
-                args = call.function.arguments
-                fn   = tool_map.get(name)
+                fn, result = self._prepare_tool_call(tool_map, call, confirm_tool_call)
                 if fn is None:
-                    raise ValueError(f"Model called unknown tool: {name!r}")
-
-                try:
-                    inspect.signature(fn).bind(**args)
-                except TypeError as exc:
-                    messages.append({
-                        "role":      "tool",
-                        "content":   f"Error: invalid arguments for {name}: {exc}",
-                        "tool_name": name,
-                    })
+                    messages.append({"role": "tool", "content": result, "tool_name": name})
                     continue
 
-                effective_confirm = (
-                    confirm_tool_call if confirm_tool_call is not None
-                    else self.confirm_tool_call
-                )
-                if effective_confirm is not None and not effective_confirm(name, args):
-                    messages.append({
-                        "role":      "tool",
-                        "content":   "Tool execution declined.",
-                        "tool_name": name,
-                    })
-                    continue
-
-                if self.on_tool_call is not None:
-                    self.on_tool_call(name, args)
-
                 try:
-                    result = fn(**args)
+                    result = fn(**call.function.arguments)
                 except Exception as exc:
                     result = f"Error: {exc}"
 
@@ -581,10 +547,7 @@ class OllamaCollector:
             effective_options.update(options)
         response = self._chat_with_retry(
             model    = model or self.model,
-            messages = [
-                {"role": "system", "content": self.content},
-                {"role": "user",   "content": query},
-            ],
+            messages = self._prompt(query),
             format  = fmt,
             options = effective_options,
         )
@@ -640,16 +603,9 @@ class OllamaCollector:
                 options = options,
             )
 
-        kwargs: Dict[str, Any] = {
-            "model":    model or self.model,
-            "messages": [
-                {"role": "system", "content": self.content},
-                {"role": "user",   "content": query},
-            ],
-        }
-        if think   is not None: kwargs["think"]   = think
-        if options is not None: kwargs["options"] = options
-        response = await self._async_chat_with_retry(**kwargs)
+        response = await self._async_chat_with_retry(
+            **self._kwargs(model, self._prompt(query), think=think, options=options)
+        )
         self._check_context(response)
         return response.message.content
 
@@ -677,14 +633,9 @@ class OllamaCollector:
             [*self.WEB_TOOLS, *(tools or [])] if web_search else tools
         )
 
-        kwargs: Dict[str, Any] = {
-            "model":    model or self.model,
-            "messages": messages,
-        }
-        if effective_tools is not None: kwargs["tools"]   = effective_tools
-        if think           is not None: kwargs["think"]   = think
-        if format          is not None: kwargs["format"]  = format
-        if options         is not None: kwargs["options"] = options
+        kwargs = self._kwargs(
+            model, messages, tools=effective_tools, think=think, format=format, options=options,
+        )
         response = await self._async_chat_with_retry(**kwargs)
         self._check_context(response)
         if effective_tools and response.message.tool_calls:
@@ -705,13 +656,7 @@ class OllamaCollector:
             async for token in collector.async_stream_chat(messages):
                 print(token, end="", flush=True)
         """
-        kwargs: Dict[str, Any] = {
-            "model":    model or self.model,
-            "messages": messages,
-            "stream":   True,
-        }
-        if think   is not None: kwargs["think"]   = think
-        if options is not None: kwargs["options"] = options
+        kwargs = self._kwargs(model, messages, stream=True, think=think, options=options)
 
         async for chunk in await self._async_client.chat(**kwargs):
             content = chunk.message.content
@@ -743,19 +688,11 @@ class OllamaCollector:
         """
         effective_tools = [*self.WEB_TOOLS, *tools] if web_search else tools
         tool_map = {fn.__name__: fn for fn in effective_tools}
-        messages: List[Dict[str, Any]] = [
-            {"role": "system", "content": self.content},
-            {"role": "user",   "content": query},
-        ]
-        call_kwargs: Dict[str, Any] = {
-            "model": model or self.model,
-            "tools": effective_tools,
-        }
-        if think   is not None: call_kwargs["think"]   = think
-        if options is not None: call_kwargs["options"] = options
+        messages = self._prompt(query)
+        call_kwargs = self._kwargs(model, messages, tools=effective_tools, think=think, options=options)
 
         for _ in range(max_turns):
-            response = await self._async_chat_with_retry(**call_kwargs, messages=messages)
+            response = await self._async_chat_with_retry(**call_kwargs)
             self._check_context(response)
             messages.append(response.message)
 
@@ -764,38 +701,13 @@ class OllamaCollector:
 
             for call in response.message.tool_calls:
                 name = call.function.name
-                args = call.function.arguments
-                fn   = tool_map.get(name)
+                fn, result = self._prepare_tool_call(tool_map, call, confirm_tool_call)
                 if fn is None:
-                    raise ValueError(f"Model called unknown tool: {name!r}")
-
-                try:
-                    inspect.signature(fn).bind(**args)
-                except TypeError as exc:
-                    messages.append({
-                        "role":      "tool",
-                        "content":   f"Error: invalid arguments for {name}: {exc}",
-                        "tool_name": name,
-                    })
+                    messages.append({"role": "tool", "content": result, "tool_name": name})
                     continue
 
-                effective_confirm = (
-                    confirm_tool_call if confirm_tool_call is not None
-                    else self.confirm_tool_call
-                )
-                if effective_confirm is not None and not effective_confirm(name, args):
-                    messages.append({
-                        "role":      "tool",
-                        "content":   "Tool execution declined.",
-                        "tool_name": name,
-                    })
-                    continue
-
-                if self.on_tool_call is not None:
-                    self.on_tool_call(name, args)
-
                 try:
-                    result = fn(**args)
+                    result = fn(**call.function.arguments)
                     if asyncio.iscoroutine(result):
                         result = await result
                 except Exception as exc:

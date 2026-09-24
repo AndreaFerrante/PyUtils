@@ -10,9 +10,7 @@ def temp_csv(tmp_path):
 
 @pytest.fixture
 def temp_pdf(tmp_path):
-    from reportlab.pdfgen import canvas
+    from pyutils.service_factory.pdf import pdf_generator_from_text
     pdf_path = str(tmp_path / "sample.pdf")
-    c = canvas.Canvas(pdf_path)
-    c.drawString(100, 750, "Hello PyUtils test content")
-    c.save()
+    pdf_generator_from_text(pdf_path, "Hello PyUtils test content")
     return pdf_path

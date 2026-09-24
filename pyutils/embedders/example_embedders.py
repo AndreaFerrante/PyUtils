@@ -4,7 +4,7 @@ Install:
     pip install transformers>=4.51.0 torch numpy faiss-cpu
 
 Run:
-    python -m pyutils.embedders.example
+    python -m pyutils.embedders.example_embedders
 """
 
 from pyutils.embedders import QwenEmbedder, RAGPipeline

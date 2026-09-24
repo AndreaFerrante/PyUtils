@@ -65,7 +65,7 @@ def test_extract_transcript_single_string_returns_dict():
     fake_data = [{'text': 'Hi', 'start': 0.0, 'duration': 1.0}]
 
     mock_transcript = MagicMock()
-    mock_transcript.fetch.return_value = fake_data
+    mock_transcript.fetch.return_value.to_raw_data.return_value = fake_data
     mock_transcript.language = 'en'
 
     mock_list = MagicMock()
@@ -73,7 +73,7 @@ def test_extract_transcript_single_string_returns_dict():
     mock_list.__iter__ = MagicMock(return_value=iter([mock_transcript]))
 
     with patch('pyutils.web.youtuber.YouTubeTranscriptApi') as mock_api:
-        mock_api.list_transcripts.return_value = mock_list
+        mock_api.return_value.list.return_value = mock_list
         result = extractor.extract_transcript('dQw4w9WgXcQ')
 
     assert isinstance(result, dict)
@@ -90,7 +90,7 @@ def test_extract_transcript_list_of_videos_returns_dict():
 
     def make_mock_list():
         mock_transcript = MagicMock()
-        mock_transcript.fetch.return_value = fake_data
+        mock_transcript.fetch.return_value.to_raw_data.return_value = fake_data
         mock_transcript.language = 'en'
         mock_list = MagicMock()
         mock_list.find_transcript.side_effect = Exception
@@ -98,7 +98,7 @@ def test_extract_transcript_list_of_videos_returns_dict():
         return mock_list
 
     with patch('pyutils.web.youtuber.YouTubeTranscriptApi') as mock_api:
-        mock_api.list_transcripts.side_effect = lambda vid: make_mock_list()
+        mock_api.return_value.list.side_effect = lambda vid: make_mock_list()
         result = extractor.extract_transcript(
             ['dQw4w9WgXcQ', 'https://youtu.be/abcdefghijk'],
             language_codes=['en']

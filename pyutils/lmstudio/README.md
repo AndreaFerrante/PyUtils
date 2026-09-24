@@ -175,7 +175,7 @@ data = lm.extract_from_pdf(
 
 Raises: `ValueError` (bad `output_format`), `FileNotFoundError` (missing PDF),
 `LMStudioError` (no text layer, server/model error, unparseable `json`/`csv`
-reply). A malformed / non-PDF file raises PyPDF2's own `PdfReadError`.
+reply). A malformed / non-PDF file raises PyMuPDF's own `FileDataError`.
 
 #### Pipeline: a folder of PDFs → one CSV
 

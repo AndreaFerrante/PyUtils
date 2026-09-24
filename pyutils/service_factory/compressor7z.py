@@ -1,10 +1,11 @@
-import os
 import sys
 import shutil
 import argparse
 import subprocess
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Tuple
+
+from pyutils.service_factory.compressor import get_txt_files
 
 
 def check_7zip_installation() -> str:
@@ -31,26 +32,6 @@ def check_7zip_installation() -> str:
         "  macOS: brew install p7zip\n"
         "  Windows: Download from https://7-zip.org/"
     )
-
-
-def get_txt_files(directory: Path) -> List[Path]:
-    """
-    Get all .txt files from the specified directory.
-    
-    Args:
-        directory: Path to the directory to scan
-        
-    Returns:
-        List of Path objects for .txt files
-    """
-    if not directory.exists():
-        raise FileNotFoundError(f"Directory '{directory}' does not exist")
-    
-    if not directory.is_dir():
-        raise NotADirectoryError(f"'{directory}' is not a directory")
-    
-    txt_files = list(directory.glob("*.txt"))
-    return txt_files
 
 
 def get_compression_args(level: int) -> List[str]:
@@ -405,7 +386,7 @@ def main():
     
     # Final summary
     print("=" * 50)
-    print(f"7zip compression completed!")
+    print("7zip compression completed!")
     
     if args.single_archive:
         print(f"Archive created: {'Yes' if successful_compressions else 'No'}")

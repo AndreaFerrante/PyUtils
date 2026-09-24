@@ -12,8 +12,6 @@ import pytest
 from pyutils.lmstudio import LMStudio, LMStudioError
 from pyutils.service_factory.pdf import pdf_generator_from_text
 
-# scrape_pdf_content via PyPDF2 preserves whole words but can be lossy about
-# inter-word spacing, so tests assert on single tokens, never on phrases.
 PDF_TEXT = "ALPHA BRAVO CHARLIE 42"
 
 

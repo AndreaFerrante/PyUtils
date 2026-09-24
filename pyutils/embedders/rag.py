@@ -40,7 +40,7 @@ import numpy as np  # noqa: E402
 
 faiss.omp_set_num_threads(1)
 
-from .embedder import QwenEmbedder
+from .embedder import DEFAULT_TASK, QwenEmbedder
 
 logger = logging.getLogger(__name__)
 
@@ -285,11 +285,6 @@ class FAISSStore:
 # ---------------------------------------------------------------------------
 # RAG Pipeline
 # ---------------------------------------------------------------------------
-
-DEFAULT_TASK = (
-    "Given a web search query, retrieve relevant passages that answer the query"
-)
-
 
 class RAGPipeline:
     """
