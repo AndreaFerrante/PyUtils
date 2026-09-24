@@ -55,14 +55,13 @@ query → │  embedder.py │ → query vector ──────────�
 ## Repository layout
 
 ```
-qwen-rag/
-├── README.md           you are here
-├── requirements.txt    pinned dependencies (processor-only)
-├── embedder.py         turns text into vectors (loads the model)
-├── rag.py              cut into passages, store, and search
-├── example.py          a runnable demo, processor-only
-└── tests/
-    └── test_rag.py      checks the math that must be exactly right
+pyutils/embedders/
+├── README.md             you are here
+├── embedder.py           turns text into vectors (loads the model)
+├── rag.py                cut into passages, store, and search
+├── example_embedders.py  a runnable demo
+└── example_pipeline.py   JSONL + LM Studio retrieval demo
+tests/test_rag.py         checks the math that must be exactly right
 ```
 
 ## Install
@@ -230,7 +229,7 @@ indexes can train on the whole collection at that point.
 
 ## JSONL retrieval with LM Studio
 
-`jsonl_lmstudio_pipeline` reads a JSONL file with Polars, embeds each non-empty
+`example_pipeline` reads a JSONL file with Polars, embeds each non-empty
 `text` value through LM Studio, retrieves the most similar records for a query,
 then asks a separate LM Studio chat model to answer from those retrieved records.
 
@@ -252,7 +251,7 @@ Start LM Studio's local server, then load an embedding model and a chat model.
 Use the same embedding model for document indexing and the query:
 
 ```bash
-python -m pyutils.embedders.jsonl_lmstudio_pipeline notes.jsonl \
+python -m pyutils.embedders.example_pipeline notes.jsonl \
   --id-column id \
   --embedding-model text-embedding-model \
   --chat-model chat-model \

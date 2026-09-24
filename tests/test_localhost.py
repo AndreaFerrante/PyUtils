@@ -46,3 +46,12 @@ def test_get_files_timestamps_in_path_returns_sorted(tmp_path):
     assert len(result) == 2
     # Each entry is (filename, timestamp)
     assert isinstance(result[0], tuple)
+
+
+def test_get_csv_files_in_path_stacked_skips_other_extensions(tmp_path):
+    from pyutils.service_factory.localhost import get_csv_files_in_path_stacked
+    (tmp_path / "a.csv").write_text("x;y\n1;2\n")
+    (tmp_path / "README").write_text("not;csv\nat;all\n")   # no suffix: "" used to match "csv"
+    (tmp_path / "b.sv").write_text("bad;file\n3;4\n")        # substring of "csv"
+    df = get_csv_files_in_path_stacked(str(tmp_path), print_files=False)
+    assert list(df.columns) == ["x", "y"] and len(df) == 1

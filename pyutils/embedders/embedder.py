@@ -36,6 +36,9 @@ logger = logging.getLogger(__name__)
 MODEL_ID = "Qwen/Qwen3-Embedding-0.6B"
 EMBEDDING_DIM = 1024
 MAX_SEQ_TOKENS = 32_768
+DEFAULT_TASK = (
+    "Given a web search query, retrieve relevant passages that answer the query"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +132,7 @@ class QwenEmbedder:
         self,
         texts: str | List[str],
         is_query: bool = False,
-        task: str = "Given a web search query, retrieve relevant passages that answer the query",
+        task: str = DEFAULT_TASK,
     ) -> np.ndarray:
         """
         Encode texts with last-token pooling.

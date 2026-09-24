@@ -263,8 +263,6 @@ class LMStudio:
 
         POST /v1/chat/completions  (stream=True)
         """
-        import json as _json
-
         messages = prompt if isinstance(prompt, list) else [{"role": "user", "content": prompt}]
         body = {
             "model": self._model(model),
@@ -282,7 +280,7 @@ class LMStudio:
             payload = text[len("data: "):]
             if payload.strip() == "[DONE]":
                 break
-            chunk = _json.loads(payload)
+            chunk = json.loads(payload)
             delta = chunk["choices"][0]["delta"].get("content")
             if delta:
                 yield delta
@@ -317,7 +315,7 @@ class LMStudio:
             FileNotFoundError if pdf_path does not exist
             LMStudioError     if the PDF has no text layer, the server errors,
                               or a "json"/"csv" reply cannot be parsed
-            PdfReadError      (from PyPDF2) if pdf_path is not a readable PDF
+            FileDataError     (from pymupdf) if pdf_path is not a readable PDF
 
         POST /v1/chat/completions  (via self.chat)
         """

@@ -42,8 +42,5 @@ def month_reduction(month_delta: int, month_current: int, year_current: int) -> 
 
 
 def get_time_month(delta_month: int, current_month: int, current_year: int) -> str:
-    """Return YYYYMMDD of the first day of the month `delta_month` months before the given month."""
-    total_months = current_year * 12 + (current_month - 1) - delta_month
-    year = total_months // 12
-    month = (total_months % 12) + 1
-    return f"{year}{month:02d}01"
+    """Same as month_reduction, with the older argument names."""
+    return month_reduction(delta_month, current_month, current_year)

@@ -65,7 +65,7 @@ def get_csv_files_in_path_stacked(
     for file_path in Path(path_to_stack).iterdir():
         if not file_path.is_file():
             continue
-        if file_path.suffix.lstrip(".") not in file_extensions:
+        if file_path.suffix.lstrip(".") != file_extensions:
             continue
         if print_files:
             print(f"Reading file named {file_path.name} . . .")

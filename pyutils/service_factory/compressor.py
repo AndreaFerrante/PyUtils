@@ -1,6 +1,6 @@
-import os
 import sys
 import gzip
+import shutil
 import argparse
 from pathlib import Path
 from typing import List, Optional
@@ -48,7 +48,7 @@ def compress_file(input_path: Path, compression_level: int, output_dir: Optional
     try:
         with open(input_path, 'rb') as f_in:
             with gzip.open(output_path, 'wb', compresslevel=compression_level) as f_out:
-                f_out.write(f_in.read())
+                shutil.copyfileobj(f_in, f_out)
         
         # Get file sizes for reporting
         original_size = input_path.stat().st_size
@@ -186,7 +186,7 @@ def main():
     
     # Final summary
     print("=" * 50)
-    print(f"Compression completed!")
+    print("Compression completed!")
     print(f"Successfully compressed: {len(successful_compressions)} files")
     
     if failed_compressions:

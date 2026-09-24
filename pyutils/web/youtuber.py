@@ -36,9 +36,6 @@ class YouTubeTranscriptExtractor:
 
     EXTENSIONS: Dict[str, str] = {'text': '.txt', 'json': '.json', 'srt': '.srt'}
 
-    def __init__(self):
-        pass
-
     def extract_video_id(self, url: str) -> Optional[str]:
         if re.match(r'^[a-zA-Z0-9_-]{11}$', url):
             return url
@@ -61,7 +58,7 @@ class YouTubeTranscriptExtractor:
 
     def get_available_transcripts(self, video_id: str) -> Dict:
         try:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            transcript_list = YouTubeTranscriptApi().list(video_id)
 
             available_transcripts = {
                 'manual': [],
@@ -95,7 +92,6 @@ class YouTubeTranscriptExtractor:
         self,
         videos: Union[str, List[str]],
         language_codes: Optional[List[str]] = None,
-        prefer_manual: bool = True
     ) -> Dict[str, Optional[List[Dict]]]:
         if isinstance(videos, str):
             videos = [videos]
@@ -115,7 +111,7 @@ class YouTubeTranscriptExtractor:
         language_codes: Optional[List[str]] = None,
     ) -> Optional[List[Dict]]:
         try:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            transcript_list = YouTubeTranscriptApi().list(video_id)
 
             transcript = None
 
@@ -136,7 +132,7 @@ class YouTubeTranscriptExtractor:
                     logger.error(f"No transcripts available for: {video_id}")
                     return None
 
-            transcript_data = transcript.fetch()
+            transcript_data = transcript.fetch().to_raw_data()
             logger.info(f"Successfully extracted transcript with {len(transcript_data)} segments")
             return transcript_data
 
@@ -244,8 +240,6 @@ def main():
                         help='Output file path — only used when a single URL is provided')
     parser.add_argument('--info', '-i', action='store_true',
                         help='Show available transcript information only')
-    parser.add_argument('--no-manual-preference', action='store_true',
-                        help="Don't prefer manual transcripts over generated ones")
 
     args = parser.parse_args()
 
@@ -266,7 +260,6 @@ def main():
     results = extractor.extract_transcript(
         args.url,
         language_codes=args.language,
-        prefer_manual=not args.no_manual_preference
     )
 
     failed = [vid for vid, data in results.items() if data is None]

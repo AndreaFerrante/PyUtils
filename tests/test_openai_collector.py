@@ -56,3 +56,13 @@ def test_get_tokens_in_string(collector):
     result = collector.get_tokens_in_string('Hello world')
     assert isinstance(result, int)
     assert result > 0
+
+
+def test_get_openai_models_dataframe_sorted_newest_first(collector):
+    old = MagicMock(id='old', object='model', created=1_600_000_000, owned_by='openai')
+    new = MagicMock(id='new', object='model', created=1_700_000_000, owned_by='openai')
+    collector.client.with_options.return_value.models.list.return_value = [old, new]
+
+    df = collector.get_openai_models_dataframe()
+
+    assert list(df['model_name']) == ['new', 'old']

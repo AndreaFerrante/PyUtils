@@ -4,7 +4,7 @@ Install the optional JSONL dependency first:
     pip install ".[jsonl]"
 
 Run:
-    python -m pyutils.embedders.jsonl_lmstudio_pipeline records.jsonl \
+    python -m pyutils.embedders.example_pipeline records.jsonl \
         --embedding-model text-embedding-model \
         --chat-model chat-model \
         --query "What does the data say about VWAP?"

@@ -2,10 +2,9 @@ import time
 import base64
 import argparse
 
-import requests
 import tiktoken
 import pandas as pd
-from openai import OpenAI
+from openai import OpenAI, OpenAIError
 from datetime import datetime
 
 
@@ -68,21 +67,16 @@ class OpenAICollector:
 
     def get_openai_models_dataframe(self, timeout: float = 30.0) -> pd.DataFrame:
         """Return available OpenAI models as a DataFrame sorted by creation date."""
-        url = "https://api.openai.com/v1/models"
         try:
-            response = requests.get(
-                url, headers={"Authorization": f"Bearer {self.api_key}"}, timeout=timeout
-            )
-            response.raise_for_status()
-        except requests.exceptions.RequestException as ex:
+            data = list(self.client.with_options(timeout=timeout).models.list())
+        except OpenAIError as ex:
             raise RuntimeError(f"Failed to fetch OpenAI models: {ex}") from ex
 
-        data = response.json()["data"]
         df = pd.DataFrame({
-            "model_name":              [m["id"]         for m in data],
-            "model_object":            [m["object"]     for m in data],
-            "model_creation_datetime": [self.convert_unix_datetime(m["created"]) for m in data],
-            "model_owned_by":          [m["owned_by"]   for m in data],
+            "model_name":              [m.id       for m in data],
+            "model_object":            [m.object   for m in data],
+            "model_creation_datetime": [self.convert_unix_datetime(m.created) for m in data],
+            "model_owned_by":          [m.owned_by for m in data],
         })
         return df.sort_values("model_creation_datetime", ascending=False).reset_index(drop=True)
 
@@ -126,19 +120,7 @@ class OpenAICollector:
 
     def get_reasoned_answer_given_query(self, query: str = "", model: str = "o1") -> str:
         """Submit a query to a reasoning model and return the response text."""
-        if not model:
-            model = self.model
-        try:
-            response = self.client.chat.completions.create(
-                model    = model,
-                messages = [
-                    {"role": "system", "content": self.content},
-                    {"role": "user",   "content": query},
-                ],
-            )
-            return response.choices[0].message.content
-        except Exception as ex:
-            raise RuntimeError(f"Reasoned completion failed for model {model!r}: {ex}") from ex
+        return self.get_answer_given_query(query, model)
 
     def get_tokens_in_string(self, text_to_tokenize: str, encoding_model: str = "") -> int:
         """Return the token count of text_to_tokenize using tiktoken."""
